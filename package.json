@@ -1,0 +1,16 @@
+{
+  "name": "sheep-100",
+  "version": "1.0.0",
+  "description": "SHEEP 100 — Planificador y Automatizador de Redes Sociales (Web + App PWA) con Firebase en Tiempo Real y Meta Graph API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "sync": "node deploy-all.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "multer": "^1.4.5-lts.1"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "SHEEP 100 — Planificador & Automatizador Social",
+  "short_name": "SHEEP 100",
+  "description": "SHEEP 100: Planificador visual Drag & Drop, vista previa de feed de Instagram, generador de copies con IA y automatización directa con Meta Graph API.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#6366f1",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

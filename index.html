@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>SHEEP 100 — Planificador & Automatizador Social</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Firebase SDK (Cloud Firestore + Auth en Tiempo Real para sheep-100-b8a90) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    window.firebaseConfig = {
+      apiKey: "AIzaSyDZeUKtn0gcQrEjjPt27HdDbBwEJTBCx8w",
+      authDomain: "sheep-100-b8a90.firebaseapp.com",
+      projectId: "sheep-100-b8a90",
+      storageBucket: "sheep-100-b8a90.firebasestorage.app",
+      messagingSenderId: "294345201315",
+      appId: "1:294345201315:web:fece17dcdb880fabf1d116",
+      measurementId: "G-25ZT1YYRLG"
+    };
+  </script>
+</head>
+<body>
+  <!-- =========================================================
+       PÁGINA DE INICIO / LOGIN PRIVADO — SHEEP 100
+       ========================================================= -->
+  <div class="login-screen show" id="loginScreen">
+    <div class="login-card">
+      <div class="login-badge">
+        <img src="./icon.svg" alt="SHEEP 100" />
+      </div>
+      <h2>SHEEP 100</h2>
+      <p class="login-sub">Ingresa con tu usuario y contraseña para acceder al planificador</p>
+
+      <form id="loginForm" autocomplete="on">
+        <label for="loginUser">Usuario o Correo</label>
+        <input
+          type="text"
+          id="loginUser"
+          autocomplete="username"
+          required
+          placeholder="admin o junior.torrez@sseguridad.cl"
+        />
+
+        <label for="loginPass">Contraseña</label>
+        <div class="pw-wrap">
+          <input
+            type="password"
+            id="loginPass"
+            autocomplete="current-password"
+            required
+            placeholder="••••••••"
+          />
+          <button type="button" class="pw-toggle" id="loginPwToggle" title="Mostrar u ocultar contraseña">
+            Ver
+          </button>
+        </div>
+
+        <div class="login-error" id="loginError"></div>
+
+        <button type="submit" class="btn-primary login-submit-btn" id="loginBtn">
+          Ingresar a SHEEP 100
+        </button>
+      </form>
+
+      <p class="login-foot">
+        🔒 Acceso privado · Sincronizado en tiempo real con Firebase Cloud (<code>sheep-100-b8a90</code>)
+      </p>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       APLICACIÓN PRINCIPAL — SHEEP 100
+       ========================================================= -->
+  <div id="app-shell" class="app-shell">
+    <!-- SIDEBAR (Desktop) -->
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="./icon.svg" alt="SHEEP 100 Logo" class="brand-icon" />
+        <div>
+          <h1 class="brand-title">SHEEP 100</h1>
+          <span class="brand-subtitle">Social Planner • Web + App</span>
+        </div>
+      </div>
+
+      <button class="btn-primary btn-new-post" id="btnOpenComposer">
+        <span>＋</span> Crear / Programar Post
+      </button>
+
+      <nav class="side-nav">
+        <button class="nav-item active" data-tab="calendar">
+          <span class="nav-icon">📅</span>
+          <div>
+            <div class="nav-label">Calendario Visual</div>
+            <div class="nav-desc">Drag & Drop semanal</div>
+          </div>
+        </button>
+        <button class="nav-item" data-tab="grid">
+          <span class="nav-icon">📱</span>
+          <div>
+            <div class="nav-label">Feed Grid Preview</div>
+            <div class="nav-desc">Estética 3x3 Instagram</div>
+          </div>
+        </button>
+        <button class="nav-item" data-tab="media">
+          <span class="nav-icon">🖼️</span>
+          <div>
+            <div class="nav-label">Media Library</div>
+            <div class="nav-desc">Fotos JPG y Videos MP4</div>
+          </div>
+        </button>
+        <button class="nav-item" data-tab="ai">
+          <span class="nav-icon">✨</span>
+          <div>
+            <div class="nav-label">Estudio IA & Copies</div>
+            <div class="nav-desc">Textos y Hashtags</div>
+          </div>
+        </button>
+        <button class="nav-item nav-item-highlight" data-tab="meta-wizard">
+          <span class="nav-icon">🧭</span>
+          <div>
+            <div class="nav-label">Paso a Paso Meta</div>
+            <div class="nav-desc" id="wizardProgressBadge">Guía Modo Desarrollo</div>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Estado de Conexión con Meta -->
+      <div class="meta-status-card" id="sidebarMetaCard">
+        <div class="meta-status-header">
+          <span class="status-dot" id="metaStatusDot"></span>
+          <strong id="metaStatusTitle">Modo Desarrollo / Local</strong>
+        </div>
+        <p id="metaStatusDesc" class="meta-status-desc">
+          Configura tu Token de Meta en 5 pasos sin pasar por App Review.
+        </p>
+        <button class="btn-secondary btn-sm full-width" onclick="switchTab('meta-wizard')">
+          Configurar Meta API →
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="main-wrapper">
+      <!-- TOP HEADER -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h2 id="currentViewTitle">📅 Calendario Visual Drag & Drop</h2>
+          <span class="scheduler-pill" id="cloudStatusPill" title="Sincronizado en tiempo real con Firebase Firestore (sheep-100-b8a90)">
+            <span class="pulse-dot"></span> <span id="cloudStatusText">Conectando Nube...</span>
+          </span>
+        </div>
+
+        <div class="topbar-actions">
+          <span class="user-pill" id="userBadgePill" title="Usuario activo">👤 admin</span>
+          <button class="btn-outline" id="btnManageUsers" title="Crear o administrar usuarios de acceso">
+            👥 Usuarios
+          </button>
+          <button class="btn-outline" id="btnToggleMobilePreview" title="Alternar vista de App Móvil en pantalla">
+            📱 Vista App
+          </button>
+          <button class="btn-outline" id="btnEnableNotifications" title="Activar recordatorios push">
+            🔔 Alertas
+          </button>
+          <button class="btn-install hidden" id="btnInstallPwa">
+            📲 Instalar App
+          </button>
+          <button class="btn-outline btn-logout" id="btnLogout" title="Cerrar sesión">
+            Salir
+          </button>
+          <button class="btn-primary mobile-only-btn" onclick="openComposerModal()">
+            ＋ Post
+          </button>
+        </div>
+      </header>
+
+      <!-- MAIN SCROLLABLE CONTAINER -->
+      <main class="content-area" id="contentArea">
+        
+        <!-- ==========================================
+             TAB 1: CALENDARIO VISUAL DRAG & DROP
+             ========================================== -->
+        <section class="tab-panel active" id="tab-calendar">
+          <div class="calendar-workspace">
+            <!-- Left Mini Media Drawer for Drag & Drop -->
+            <div class="media-drawer">
+              <div class="drawer-header">
+                <h3>🎞️ Bandeja Multimedia</h3>
+                <span class="badge">Arrastra al calendario</span>
+              </div>
+              <p class="drawer-hint">
+                Arrastra cualquier foto o video hacia un día del calendario para crear un post programado al instante.
+              </p>
+              <div class="drawer-upload-bar">
+                <button class="btn-secondary btn-sm full-width" onclick="switchTab('media')">
+                  ＋ Subir nuevos medios
+                </button>
+              </div>
+              <div class="drawer-media-list" id="calendarMediaDrawer"></div>
+            </div>
+
+            <!-- Right Visual Week Calendar + Queue -->
+            <div class="calendar-main">
+              <div class="calendar-toolbar">
+                <div class="calendar-nav-btns">
+                  <button class="btn-icon" id="btnPrevWeek" title="Semana anterior">◀</button>
+                  <h3 id="calendarWeekLabel">Semana Actual</h3>
+                  <button class="btn-icon" id="btnNextWeek" title="Semana siguiente">▶</button>
+                  <button class="btn-outline btn-sm" id="btnTodayWeek">Hoy</button>
+                </div>
+
+                <div class="status-legend">
+                  <span class="legend-item"><i class="dot-draft"></i> Borrador</span>
+                  <span class="legend-item"><i class="dot-scheduled"></i> Programado</span>
+                  <span class="legend-item"><i class="dot-published"></i> Publicado</span>
+                </div>
+              </div>
+
+              <!-- 7-Day Visual Drop Grid -->
+              <div class="week-grid" id="weekGrid"></div>
+
+              <!-- List of All Posts by Filter -->
+              <div class="queue-section">
+                <div class="queue-header">
+                  <h3>📋 Bandeja de Planificación y Estado de Envíos</h3>
+                  <div class="filter-pills" id="postFilterPills">
+                    <button class="pill active" data-filter="all">Todos</button>
+                    <button class="pill" data-filter="scheduled">Programados</button>
+                    <button class="pill" data-filter="draft">Borradores</button>
+                    <button class="pill" data-filter="published">Publicados</button>
+                  </div>
+                </div>
+                <div class="posts-table-list" id="postsQueueList"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 2: VISUAL FEED GRID PREVIEW (INSTAGRAM)
+             ========================================== -->
+        <section class="tab-panel" id="tab-grid">
+          <div class="grid-planner-layout">
+            <div class="grid-planner-info">
+              <div class="card">
+                <h3>📱 Previsualizador Estético de Feed — SHEEP 100</h3>
+                <p class="muted-text">
+                  Comprueba cómo se verá la cuadrícula 3x3 de tu perfil de Instagram antes de que tus publicaciones salgan al aire.
+                  <strong>Arrastra y suelta las casillas</strong> en el teléfono para cambiar el orden visual.
+                </p>
+                <div class="stats-mini-grid">
+                  <div class="stat-box">
+                    <span class="stat-num" id="statScheduledCount">0</span>
+                    <span class="stat-label">Programados</span>
+                  </div>
+                  <div class="stat-box">
+                    <span class="stat-num" id="statPublishedCount">0</span>
+                    <span class="stat-label">Publicados</span>
+                  </div>
+                  <div class="stat-box">
+                    <span class="stat-num" id="statMediaCount">0</span>
+                    <span class="stat-label">En Librería</span>
+                  </div>
+                </div>
+
+                <hr class="divider" />
+                <h4>⚡ Acciones Rápidas para Modo App / Móvil</h4>
+                <p class="muted-text">
+                  Si usas TikTok o aún no activas la publicación directa por API, haz clic en cualquier post de la cuadrícula para <strong>descargar la foto y copiar el texto al portapapeles en 1 toque</strong>.
+                </p>
+                <div id="selectedGridPostDetail" class="selected-grid-detail">
+                  <em>Selecciona una miniatura del teléfono para ver sus detalles o publicarla ahora.</em>
+                </div>
+              </div>
+            </div>
+
+            <!-- Phone Mockup -->
+            <div class="phone-mockup-container">
+              <div class="phone-frame">
+                <div class="phone-notch"></div>
+                <div class="ig-header">
+                  <span class="ig-handle" id="igPreviewHandle">@sheep_100_oficial</span>
+                  <span class="ig-badge">Empresa</span>
+                </div>
+                <div class="ig-profile-row">
+                  <div class="ig-avatar">🐑</div>
+                  <div class="ig-metrics">
+                    <div><strong>128</strong><span>Posts</span></div>
+                    <div><strong>4.8K</strong><span>Seguidores</span></div>
+                    <div><strong>310</strong><span>Siguiendo</span></div>
+                  </div>
+                </div>
+                <div class="ig-bio">
+                  <strong>SHEEP 100 • Planificación & Automatización ✨</strong>
+                  <p>Sincronizado en tiempo real con Firebase & Meta Graph API 🚀</p>
+                </div>
+                <div class="ig-tabs">
+                  <span class="active">▦ CUADRÍCULA</span>
+                  <span>🎬 REELS</span>
+                  <span>🏷️ ETIQUETADOS</span>
+                </div>
+                <div class="ig-grid-3x3" id="igGridContainer"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 3: MEDIA LIBRARY (GESTIÓN DE MEDIOS)
+             ========================================== -->
+        <section class="tab-panel" id="tab-media">
+          <div class="media-library-layout">
+            <div class="card upload-card">
+              <h3>📤 Subir o Vincular Archivos Multimedia</h3>
+              <p class="muted-text">
+                Sube imágenes (<strong>JPG recomendado por Meta</strong>) o videos (<strong>MP4 para Reels</strong>). También puedes pegar una URL pública directa para que la API de Meta Graph pueda descargarla automáticamente desde cualquier lugar.
+              </p>
+
+              <div class="upload-forms-grid">
+                <!-- Local / Cloud File Upload -->
+                <form id="formUploadFile" class="upload-box">
+                  <h4>1. Subir archivo desde tu dispositivo</h4>
+                  <input type="file" id="inputFile" accept="image/jpeg,image/png,image/webp,video/mp4" required />
+                  <input type="text" id="inputFileTitle" placeholder="Título descriptivo (ej. Promo Viernes)" />
+                  <input type="url" id="inputFilePublicUrl" placeholder="URL pública opcional (https://...jpg) para Meta API" />
+                  <input type="text" id="inputFileTags" placeholder="Etiquetas separadas por coma (ej. producto, reel)" />
+                  <button type="submit" class="btn-primary full-width">Subir a Media Library</button>
+                </form>
+
+                <!-- Public URL Form -->
+                <form id="formAddUrl" class="upload-box">
+                  <h4>2. Agregar por URL Pública (Listo para Meta Graph API)</h4>
+                  <input type="url" id="inputMediaUrl" placeholder="https://ejemplo.com/mi-imagen.jpg" required />
+                  <input type="text" id="inputMediaTitle" placeholder="Nombre del recurso" required />
+                  <select id="inputMediaType">
+                    <option value="image">Imagen (JPG - Post Instagram/Facebook)</option>
+                    <option value="video">Video (MP4 - Reel / TikTok)</option>
+                  </select>
+                  <input type="text" id="inputMediaTags" placeholder="Etiquetas (ej. campaña, lanzamiento)" />
+                  <button type="submit" class="btn-secondary full-width">Guardar URL en Librería</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="section-header-row">
+                <h3>🖼️ Tu Biblioteca de Medios (<span id="mediaCountLabel">0</span>)</h3>
+                <input type="search" id="mediaSearchInput" class="search-input" placeholder="Filtrar por nombre o etiqueta..." />
+              </div>
+              <div class="media-gallery-grid" id="mediaGalleryGrid"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 4: ESTUDIO IA (COPIES & HASHTAGS)
+             ========================================== -->
+        <section class="tab-panel" id="tab-ai">
+          <div class="ai-studio-layout">
+            <div class="card">
+              <h3>✨ Generador y Optimizador de Textos con IA</h3>
+              <p class="muted-text">
+                Genera copies persuasivos, estructuras para Reels/TikTok y bloques de hashtags optimizados en segundos.
+              </p>
+
+              <form id="formAiGenerator" class="ai-form">
+                <label>¿Sobre qué trata tu publicación?</label>
+                <textarea id="aiTopic" rows="3" placeholder="Ej: Lanzamiento de nuestra nueva colección de invierno con 20% de descuento por 48 horas..." required></textarea>
+
+                <div class="form-row-2">
+                  <div>
+                    <label>Red Social Principal</label>
+                    <select id="aiPlatform">
+                      <option value="Instagram Feed & Reels">Instagram (Feed / Reels)</option>
+                      <option value="TikTok">TikTok</option>
+                      <option value="Facebook Page">Facebook Page</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Tono de Comunicación</label>
+                    <select id="aiTone">
+                      <option value="Cercano y Magnético">Cercano y Magnético</option>
+                      <option value="Profesional y Experto">Profesional y Educativo</option>
+                      <option value="Venta Directa y Urgencia">Venta Directa / Promoción</option>
+                      <option value="Viral y Dinámico">Viral / Storytelling</option>
+                    </select>
+                  </div>
+                </div>
+
+                <label>Llamado a la Acción (CTA)</label>
+                <input type="text" id="aiCta" placeholder="Ej: Escribe INFO en los comentarios y te enviamos el link por DM" />
+
+                <button type="submit" class="btn-primary full-width" id="btnRunAi">
+                  ✨ Generar 3 Propuestas de Copy + Hashtags
+                </button>
+              </form>
+
+              <div class="hashtag-manager">
+                <h4>#️⃣ Tus Grupos de Hashtags Guardados (1 Clic)</h4>
+                <div id="hashtagGroupsContainer" class="hashtag-groups-list"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>📝 Resultados Generados</h3>
+              <div id="aiResultsContainer" class="ai-results-container">
+                <div class="empty-state">
+                  <p>Escribe tu idea a la izquierda y pulsa <strong>"Generar 3 Propuestas"</strong>. Podrás enviarlas directo al programador con un clic.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 5: PASO A PASO META (MODO DESARROLLO)
+             ========================================== -->
+        <section class="tab-panel" id="tab-meta-wizard">
+          <div class="wizard-layout">
+            <!-- Banner explicativo del Truco Modo Desarrollo -->
+            <div class="meta-hero-banner">
+              <div>
+                <span class="hero-pill">💡 TRUCO OFICIAL PARA USO PROPIO (SIN APP REVIEW)</span>
+                <h3>Conecta tu cuenta de Instagram Business en Modo Desarrollo</h3>
+                <p>
+                  Como solo vas a automatizar <strong>tu propia cuenta empresa</strong>, <strong>NO necesitas enviar videos (screencasts), ni capturas de pantalla, ni pasar por la revisión pública de Meta</strong>.
+                  Dejando tu app en <em>Modo Desarrollo (Development Mode)</em> y agregándote como Tester, tienes acceso completo y gratuito a la API oficial de publicación.
+                </p>
+              </div>
+              <div class="wizard-progress-circle">
+                <strong id="wizardPercentText">0%</strong>
+                <span>Completado</span>
+              </div>
+            </div>
+
+            <div class="wizard-grid">
+              <!-- Columna Izquierda: Los 5 Pasos Interactivos -->
+              <div class="wizard-steps-col">
+                <h3>✅ Lista de Verificación Paso a Paso (23 min en total)</h3>
+
+                <!-- PASO 1 -->
+                <div class="step-card" id="card-step1">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" data-step="step1_devAccount" class="wizard-checkbox" />
+                      <span class="step-num">Paso 1</span>
+                      <strong>Crear tu cuenta de Desarrollador y la App (5 min)</strong>
+                    </label>
+                    <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener" class="btn-link">
+                      Abrir Meta for Developers ↗
+                    </a>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Entra a <a href="https://developers.facebook.com/" target="_blank" rel="noopener">developers.facebook.com</a>, inicia sesión con tu Facebook personal y haz clic en <strong>"Mis aplicaciones" → "Crear aplicación"</strong>.</li>
+                    <li>Si te pregunta caso de uso, elige <strong>"Otros" (Other)</strong> al final de la lista y luego selecciona el tipo <strong>"Empresa" (Business)</strong>.</li>
+                    <li>Asigna un nombre (ej. <code>SHEEP 100</code>), pon tu correo y haz clic en <strong>"Crear app"</strong>.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Verás el panel principal con tu <code>Identificador de la app (App ID)</code> arriba a la izquierda, y el selector dirá <strong>"En desarrollo"</strong>.
+                  </div>
+                </div>
+
+                <!-- PASO 2 -->
+                <div class="step-card" id="card-step2">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" data-step="step2_igGraphApi" class="wizard-checkbox" />
+                      <span class="step-num">Paso 2</span>
+                      <strong>Vincular la API de Instagram Graph (3 min)</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>En el panel principal (Dashboard) de tu app en Meta, baja hasta la sección <strong>"Agregar productos a tu app"</strong>.</li>
+                    <li>Busca <strong>Instagram Graph API</strong> (o <strong>Instagram</strong>) y haz clic en el botón <strong>"Configurar" (Set Up)</strong>.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> El producto aparecerá listado en el menú lateral izquierdo de tu aplicación.
+                  </div>
+                </div>
+
+                <!-- PASO 3 -->
+                <div class="step-card" id="card-step3">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" data-step="step3_testerRole" class="wizard-checkbox" />
+                      <span class="step-num">Paso 3</span>
+                      <strong>Configurar Roles y agregarte como Tester / Evaluador (5 min)</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Como creador de la app ya eres <strong>Administrador</strong>. Si tu Página de Facebook e Instagram están en ese mismo perfil, ya estás autorizado.</li>
+                    <li>Si deseas autorizar otra cuenta tuya, ve en el menú izquierdo a <strong>Roles de la app → Roles</strong>.</li>
+                    <li>Haz clic en <strong>"Agregar personas"</strong>, elige <strong>Evaluador (Tester)</strong>, ingresa tu usuario y acepta la invitación en Facebook.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Tu cuenta figura como Administrador o Evaluador activo en Modo Desarrollo.
+                  </div>
+                </div>
+
+                <!-- PASO 4 -->
+                <div class="step-card" id="card-step4">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" data-step="step4_linkFbPage" class="wizard-checkbox" />
+                      <span class="step-num">Paso 4</span>
+                      <strong>Vincular tu Instagram Empresa a tu Página de Facebook (5 min)</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Asegúrate de que tu cuenta de Instagram sea de tipo <strong>Empresa (Business)</strong> o <strong>Creador</strong> (en la app móvil de Instagram: <em>Configuración → Tipo de cuenta y herramientas</em>).</li>
+                    <li>Entra a tu <strong>Página de Facebook</strong> en el navegador → <strong>Configuración → Cuentas vinculadas (Linked Accounts) → Instagram</strong> y haz clic en <strong>Conectar cuenta</strong>.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Tu Página de Facebook y tu Instagram profesional están oficialmente enlazados (puente obligatorio de Meta).
+                  </div>
+                </div>
+
+                <!-- PASO 5 -->
+                <div class="step-card" id="card-step5">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" data-step="step5_accessToken" class="wizard-checkbox" />
+                      <span class="step-num">Paso 5</span>
+                      <strong>Generar el Access Token en Graph API Explorer (5 min)</strong>
+                    </label>
+                    <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener" class="btn-link">
+                      Abrir Graph API Explorer ↗
+                    </a>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Abre <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> y selecciona tu App en el desplegable superior derecho <strong>"Meta App"</strong>.</li>
+                    <li>En <strong>Permissions (Permisos)</strong>, añade estos 4 permisos clave (haz clic para copiar):
+                      <div class="perm-chips">
+                        <span class="perm-chip" onclick="copyText('instagram_basic')">instagram_basic 📋</span>
+                        <span class="perm-chip" onclick="copyText('instagram_content_publish')">instagram_content_publish 📋</span>
+                        <span class="perm-chip" onclick="copyText('pages_show_list')">pages_show_list 📋</span>
+                        <span class="perm-chip" onclick="copyText('pages_read_engagement')">pages_read_engagement 📋</span>
+                      </div>
+                    </li>
+                    <li>Haz clic en el botón azul <strong>"Generate Access Token"</strong>, selecciona tu Página de Facebook y tu cuenta de Instagram en la ventana emergente y autoriza.</li>
+                    <li>Copia el código largo generado (<code>EAA...</code>) y pégalo en el panel de conexión de la derecha 👉.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Al pegar tu token a la derecha y pulsar <em>"Autodetectar Cuenta con Meta"</em>, SHEEP 100 rellenará tu ID de Instagram automáticamente y lo sincronizará en Firebase.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Columna Derecha: Panel de Credenciales + Validador en Vivo + Código 2 Pasos -->
+              <div class="wizard-config-col">
+                <div class="card">
+                  <h3>🔑 Conexión en Vivo con Meta Graph API</h3>
+                  <p class="muted-text">
+                    Pega tu <strong>Access Token</strong> del Paso 5 y pulsa <strong>"Verificar y Autodetectar"</strong>. SHEEP 100 consultará la API de Meta directamente para obtener tu <code>Instagram Business ID</code>.
+                  </p>
+
+                  <form id="formMetaConfig" class="meta-config-form">
+                    <label>Access Token de Meta (Graph API Explorer)</label>
+                    <textarea id="cfgAccessToken" rows="3" placeholder="Pega aquí tu token EAA..."></textarea>
+
+                    <div class="btn-row">
+                      <button type="button" class="btn-primary" id="btnVerifyToken">
+                        🔍 Verificar Token y Autodetectar Instagram ID
+                      </button>
+                    </div>
+
+                    <div id="tokenVerifyFeedback" class="verify-feedback hidden"></div>
+
+                    <div class="form-row-2">
+                      <div>
+                        <label>Instagram Business User ID</label>
+                        <input type="text" id="cfgIgUserId" placeholder="Ej: 17841405822304914" />
+                      </div>
+                      <div>
+                        <label>Usuario de Instagram Detectado</label>
+                        <input type="text" id="cfgIgUsername" placeholder="@tu_cuenta" />
+                      </div>
+                    </div>
+
+                    <div class="form-row-2">
+                      <div>
+                        <label>App ID (Opcional - para Token 60 días)</label>
+                        <input type="text" id="cfgAppId" placeholder="Identificador de la app" />
+                      </div>
+                      <div>
+                        <label>App Secret (Opcional - para Token 60 días)</label>
+                        <input type="password" id="cfgAppSecret" placeholder="Clave secreta de la app" />
+                      </div>
+                    </div>
+
+                    <button type="button" class="btn-outline btn-sm full-width" id="btnExchangeLongToken">
+                      🔄 Convertir Token Temporal en Token de Larga Duración (60 días)
+                    </button>
+
+                    <hr class="divider" />
+
+                    <label>Gemini API Key (Opcional - para Estudio IA con Gemini 2.5 Flash)</label>
+                    <input type="password" id="cfgGeminiKey" placeholder="AIzaSy... (Si lo dejas vacío usa el motor IA integrado)" />
+
+                    <div class="toggle-group">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="cfgAutoPublish" checked />
+                        <span>Activar Auto-Publicación automática al llegar la fecha/hora</span>
+                      </label>
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="cfgSimulationFallback" checked />
+                        <span>Permitir Modo Simulación/Recordatorio si aún no hay Token o URL pública</span>
+                      </label>
+                    </div>
+
+                    <button type="submit" class="btn-secondary full-width">
+                      💾 Guardar Configuración en Nube y Local
+                    </button>
+                  </form>
+                </div>
+
+                <!-- Explicación Técnica del Flujo de 2 Pasos de Meta -->
+                <div class="card code-preview-card">
+                  <h3>⚙️ Flujo Oficial de 2 Pasos de Meta Graph API</h3>
+                  <p class="muted-text">
+                    Instagram Graph API publica mediante 2 peticiones POST consecutivas (acepta imágenes <strong>JPG</strong> y videos <strong>MP4</strong> con URL pública):
+                  </p>
+                  <pre class="code-block" id="metaCodeSnippet">// PASO 1: Crear el contenedor de medios en Meta
+POST https://graph.facebook.com/v21.0/{IG_USER_ID}/media
+Body: {
+  image_url: "https://tu-dominio.com/foto.jpg",
+  caption: "Tu copy con #hashtags",
+  access_token: "EAA..."
+}
+
+// PASO 2: Publicar el contenedor (media_publish)
+POST https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish
+Body: {
+  creation_id: "17895695668004550",
+  access_token: "EAA..."
+}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- BOTTOM NAVIGATION BAR (Mobile App / PWA View) -->
+      <nav class="bottom-nav">
+        <button class="bottom-nav-item active" data-tab="calendar">
+          <span>📅</span>
+          <small>Calendario</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="grid">
+          <span>📱</span>
+          <small>Feed Grid</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="media">
+          <span>🖼️</span>
+          <small>Medios</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="ai">
+          <span>✨</span>
+          <small>IA Copies</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="meta-wizard">
+          <span>🧭</span>
+          <small>Meta API</small>
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: CREAR / EDITAR PUBLICACIÓN
+       ========================================== -->
+  <div class="modal-backdrop hidden" id="composerModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="composerModalTitle">✨ Programar Publicación</h3>
+        <button class="btn-close" id="btnCloseComposer">✕</button>
+      </div>
+
+      <form id="formPostComposer" class="composer-form">
+        <input type="hidden" id="postId" />
+
+        <div class="composer-grid">
+          <!-- Left: Media Selection & Preview -->
+          <div class="composer-media-col">
+            <label>1. Recurso Visual (Imagen JPG o Video MP4)</label>
+            <div class="composer-preview-box" id="composerMediaPreview">
+              <span>Selecciona un medio de tu librería o pega una URL abajo</span>
+            </div>
+
+            <label>Elegir de tu Media Library</label>
+            <select id="postMediaSelect">
+              <option value="">-- Seleccionar de Media Library --</option>
+            </select>
+
+            <label>URL Pública para Meta Graph API (https://...jpg o .mp4)</label>
+            <input type="url" id="postPublicMediaUrl" placeholder="https://images.unsplash.com/..." required />
+
+            <label>Formato de Publicación en Instagram</label>
+            <select id="postMediaType">
+              <option value="IMAGE">📸 Imagen Feed (JPG)</option>
+              <option value="REELS">🎬 Video Reels (MP4)</option>
+            </select>
+          </div>
+
+          <!-- Right: Copy, Platforms & Schedule -->
+          <div class="composer-details-col">
+            <label>Título interno de referencia</label>
+            <input type="text" id="postTitle" placeholder="Ej: Post Lanzamiento Lunes" required />
+
+            <label>Redes Sociales Destino</label>
+            <div class="platform-checks">
+              <label class="plat-pill">
+                <input type="checkbox" name="postPlatform" value="instagram" checked />
+                <span>📸 Instagram</span>
+              </label>
+              <label class="plat-pill">
+                <input type="checkbox" name="postPlatform" value="facebook" />
+                <span>📘 Facebook Page</span>
+              </label>
+              <label class="plat-pill">
+                <input type="checkbox" name="postPlatform" value="tiktok" />
+                <span>🎵 TikTok (Recordatorio)</span>
+              </label>
+            </div>
+
+            <div class="caption-label-row">
+              <label>Copy / Descripción y Hashtags</label>
+              <span class="char-counter" id="captionCharCounter">0 / 2200</span>
+            </div>
+            <textarea id="postCaption" rows="5" placeholder="Escribe tu copy aquí o genéralo en el Estudio IA..." required></textarea>
+
+            <div class="quick-hashtag-bar" id="composerHashtagPills"></div>
+
+            <label>Primer Comentario Automático (Opcional en Instagram)</label>
+            <input type="text" id="postFirstComment" placeholder="Ej: ¡Link directo en nuestra biografía!" />
+
+            <div class="form-row-2">
+              <div>
+                <label>Fecha y Hora Programada</label>
+                <input type="datetime-local" id="postScheduledAt" required />
+              </div>
+              <div>
+                <label>Estado Inicial</label>
+                <select id="postStatus">
+                  <option value="scheduled">⏰ Programado (Auto-publicar)</option>
+                  <option value="draft">📝 Guardar como Borrador</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-outline" id="btnCancelComposer">Cancelar</button>
+          <button type="submit" class="btn-primary">💾 Guardar en Calendario</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL: GESTIÓN DE USUARIOS DE ACCESO
+       ========================================== -->
+  <div class="modal-backdrop hidden" id="usersModal">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <div>
+          <h3>👥 Usuarios de Acceso — SHEEP 100</h3>
+          <p class="muted-text" style="margin:4px 0 0;">
+            Crea nuevos usuarios o actualiza contraseñas. Se sincronizan en tiempo real en Firebase (<code>sheep-100-b8a90</code>).
+          </p>
+        </div>
+        <button class="btn-close" id="btnCloseUsersModal">✕</button>
+      </div>
+
+      <form id="formCreateUser">
+        <label>Usuario o Correo Electrónico</label>
+        <input type="text" id="newUsername" placeholder="Ej: junior.torrez@sseguridad.cl o editor1" required />
+
+        <label>Nombre para mostrar</label>
+        <input type="text" id="newUserDisplayName" placeholder="Ej: Junior Torrez" />
+
+        <label>Contraseña (mínimo 4 caracteres)</label>
+        <div class="pw-wrap">
+          <input type="password" id="newUserPass" placeholder="••••••••" required />
+          <button type="button" class="pw-toggle" id="newUserPwToggle">Ver</button>
+        </div>
+
+        <div id="userModalMsg" class="login-error" style="text-align:left;margin-bottom:10px;"></div>
+
+        <button type="submit" class="btn-primary full-width">
+          ＋ Guardar / Actualizar Usuario en la Nube
+        </button>
+      </form>
+
+      <hr class="divider" />
+      <h4 style="font-size:0.85rem;margin-bottom:8px;">Usuarios Autorizados</h4>
+      <div id="usersListContainer" class="hashtag-groups-list"></div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

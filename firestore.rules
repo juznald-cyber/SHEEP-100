@@ -1,0 +1,114 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: sheep100
+// Document ID: {docId} (e.g., workspace_main or chunk IDs)
+// Fields:
+//   - payload: string or map (required/optional, max 950KB string) - Serialized workspace state or chunk data
+//   - savedAt: string or number or timestamp (required/optional) - Last synchronization timestamp
+//   - updatedBy: string (optional, max 128 chars) - Username or client identifier
+//   - version: number or string (optional) - Schema/sync version
+//   - chunkIndex: number (optional) - Chunk index for large payloads
+//   - totalChunks: number (optional) - Total chunks count
+//
+// Collection: sheep100_users
+// Document ID: {userId} (username or user identifier)
+// Fields:
+//   - username: string (required, 1..100 chars) - User login identifier
+//   - passHash: string (required, 1..512 chars) - Hashed password credential
+//   - role: string (optional, max 50 chars) - User role in workspace
+//   - name: string (optional, max 150 chars) - Display name
+//   - active: bool (optional) - Whether account is active
+//   - updatedAt: string or number or timestamp (optional) - Last update timestamp
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidOptionalString(field, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    // Domain Validator: Workspace Synchronization Document (/sheep100/{docId})
+    function isValidWorkspaceDoc(data) {
+      return data is map &&
+             data.keys().size() <= 25 &&
+             (
+               ('payload' in data && (
+                 (data.payload is string && data.payload.size() <= 980000) ||
+                 data.payload is map ||
+                 data.payload is list
+               )) ||
+               ('savedAt' in data && (
+                 (data.savedAt is string && data.savedAt.size() <= 100) ||
+                 data.savedAt is number ||
+                 data.savedAt is timestamp
+               ))
+             ) &&
+             isValidOptionalString('updatedBy', 128);
+    }
+
+    // Domain Validator: Workspace User Document (/sheep100_users/{userId})
+    function isValidSheepUser(data) {
+      return data is map &&
+             data.keys().size() <= 20 &&
+             hasRequiredFields(['username', 'passHash']) &&
+             data.username is string &&
+             data.username.size() >= 1 &&
+             data.username.size() <= 100 &&
+             data.passHash is string &&
+             data.passHash.size() >= 1 &&
+             data.passHash.size() <= 512 &&
+             isValidOptionalString('role', 50) &&
+             isValidOptionalString('name', 150);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Single-workspace state & chunks synchronization
+    match /sheep100/{docId} {
+      allow read: if isAuthenticated() || resource == null || ('payload' in resource.data) || ('savedAt' in resource.data);
+      allow create: if isAuthenticated() || isValidWorkspaceDoc(request.resource.data);
+      allow update: if isAuthenticated() || isValidWorkspaceDoc(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    // Internal workspace users synchronization
+    match /sheep100_users/{userId} {
+      allow read: if isAuthenticated() || resource == null || ('username' in resource.data && 'passHash' in resource.data);
+      allow create: if isAuthenticated() || isValidSheepUser(request.resource.data);
+      allow update: if isAuthenticated() || (
+        isValidSheepUser(request.resource.data) &&
+        request.resource.data.username == resource.data.username
+      );
+      allow delete: if isAuthenticated();
+    }
+
+    // Default deny all other collections and paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

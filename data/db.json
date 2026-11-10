@@ -1,0 +1,176 @@
+{
+  "metaConfig": {
+    "appId": "",
+    "appSecret": "",
+    "accessToken": "",
+    "igUserId": "",
+    "igUsername": "",
+    "fbPageId": "",
+    "fbPageName": "",
+    "autoPublishEnabled": true,
+    "simulationFallback": true,
+    "geminiApiKey": "",
+    "wizardSteps": {
+      "step1_devAccount": false,
+      "step2_igGraphApi": false,
+      "step3_testerRole": false,
+      "step4_linkFbPage": false,
+      "step5_accessToken": false
+    }
+  },
+  "hashtagGroups": [
+    {
+      "id": "hg-1",
+      "name": "Emprendimiento & Negocios",
+      "tags": "#emprendedores #negociosdigitales #marketingdigital #marcaPersonal #exito #productividad #estrategiadigital"
+    },
+    {
+      "id": "hg-2",
+      "name": "Reels Virales & Alcance",
+      "tags": "#reelsinstagram #viralreels #tendencia #parati #fyp #creadoresdecontenido #inspiraciondiaria"
+    },
+    {
+      "id": "hg-3",
+      "name": "E-commerce & Lanzamientos",
+      "tags": "#tiendavirtual #nuevacoleccion #comprasonline #enviosatodoelpais #calidadpremium #ofertaespecial"
+    }
+  ],
+  "mediaLibrary": [
+    {
+      "id": "media-1",
+      "title": "Lanzamiento Café Especialidad.jpg",
+      "url": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
+      "publicUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
+      "type": "image",
+      "format": "JPG",
+      "tags": [
+        "producto",
+        "lanzamiento",
+        "destacado"
+      ],
+      "createdAt": "2026-11-07T16:13:26.637Z"
+    },
+    {
+      "id": "media-2",
+      "title": "Workspace & Productividad.jpg",
+      "url": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "publicUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "type": "image",
+      "format": "JPG",
+      "tags": [
+        "detrasdecamaras",
+        "oficina"
+      ],
+      "createdAt": "2026-11-08T16:13:26.637Z"
+    },
+    {
+      "id": "media-3",
+      "title": "Estética Minimalista Brand.jpg",
+      "url": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
+      "publicUrl": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
+      "type": "image",
+      "format": "JPG",
+      "tags": [
+        "branding",
+        "lifestyle"
+      ],
+      "createdAt": "2026-11-09T16:13:26.637Z"
+    },
+    {
+      "id": "media-4",
+      "title": "Diseño Creativo Studio.jpg",
+      "url": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
+      "publicUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
+      "type": "image",
+      "format": "JPG",
+      "tags": [
+        "equipo",
+        "comunidad"
+      ],
+      "createdAt": "2026-11-10T16:13:26.638Z"
+    }
+  ],
+  "posts": [
+    {
+      "id": "post-1",
+      "title": "5 Secretos para automatizar tus redes",
+      "caption": "¿Pasas horas pensando qué publicar cada día? 🚀\n\nCon nuestro nuevo flujo de planificación visual puedes dejar lista toda tu semana en 15 minutos.\n\n✅ Organiza tu cuadrícula visual\n✅ Genera copies magnéticos con IA\n✅ Publica automáticamente con Meta Graph API\n\nGuarda este post para aplicarlo hoy mismo 👇\n\n#marketingdigital #automatizacion #emprendedores #redesSociales",
+      "mediaId": "media-2",
+      "mediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "publicMediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "mediaType": "IMAGE",
+      "platforms": [
+        "instagram",
+        "facebook"
+      ],
+      "status": "scheduled",
+      "scheduledAt": "2026-11-11T21:00:00.000Z",
+      "firstComment": "¿Cuál es la red social que más tiempo te consume? ¡Te leemos!",
+      "gridOrder": 1,
+      "createdAt": "2026-11-10T16:13:26.637Z",
+      "logs": [
+        {
+          "time": "2026-11-10T16:13:26.637Z",
+          "message": "Publicación programada en cola automática."
+        }
+      ]
+    },
+    {
+      "id": "post-2",
+      "title": "Detrás de cámaras de nuestra marca",
+      "caption": "La constancia supera al talento cuando el talento no es constante ☕✨\n\nAsí empezamos la semana preparando todas las novedades que se vienen este mes.\n\n#detrasdecamaras #branding #emprendimiento #productividad",
+      "mediaId": "media-1",
+      "mediaUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
+      "publicMediaUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
+      "mediaType": "IMAGE",
+      "platforms": [
+        "instagram"
+      ],
+      "status": "scheduled",
+      "scheduledAt": "2026-11-12T15:30:00.000Z",
+      "firstComment": "",
+      "gridOrder": 2,
+      "createdAt": "2026-11-10T16:13:26.637Z",
+      "logs": [
+        {
+          "time": "2026-11-10T16:13:26.637Z",
+          "message": "Publicación programada para Instagram Feed."
+        }
+      ]
+    },
+    {
+      "id": "post-3",
+      "title": "Bienvenidos a nuestra nueva etapa",
+      "caption": "Construyendo el futuro de nuestra marca paso a paso. Gracias por acompañarnos en este viaje 🙌🔥\n\n#marcaPersonal #negocios #exito",
+      "mediaId": "media-3",
+      "mediaUrl": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
+      "publicMediaUrl": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
+      "mediaType": "IMAGE",
+      "platforms": [
+        "instagram",
+        "tiktok"
+      ],
+      "status": "published",
+      "scheduledAt": "2026-11-09T18:00:00.000Z",
+      "publishedAt": "2026-11-09T18:00:00.000Z",
+      "firstComment": "",
+      "gridOrder": 3,
+      "createdAt": "2026-11-09T18:00:00.000Z",
+      "logs": [
+        {
+          "time": "2026-11-09T18:00:00.000Z",
+          "message": "Publicado exitosamente (Contenedor Meta ID: 17895695668004550)."
+        }
+      ]
+    }
+  ],
+  "activityLogs": [
+    {
+      "id": "log-init",
+      "timestamp": "2026-11-10T16:13:26.637Z",
+      "type": "info",
+      "title": "Sistema de Automatización Activo",
+      "detail": "El motor de programación revisa tus posts cada 30 segundos."
+    }
+  ]
+}
