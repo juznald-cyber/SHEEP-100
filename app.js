@@ -1129,11 +1129,43 @@ async function executeTikTokPublish(post) {
     throw new Error('TikTok requiere una URL pública https:// accesible para descargar el video.');
   }
 
+  const postTitle = post.caption || post.title || 'Publicación SHEEP 100';
+
+  // 1. Try local server endpoint if running on localhost / 127.0.0.1 (bypasses browser CORS)
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    try {
+      const srvRes = await fetch('/api/tiktok/publish-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessToken: ttCfg.accessToken,
+          mediaUrl: mediaUrl,
+          title: postTitle
+        })
+      });
+      const data = await srvRes.json();
+      if (srvRes.ok && data.data?.publish_id) {
+        return {
+          success: true,
+          message: `¡Publicado exitosamente en TikTok! (Publish ID: ${data.data.publish_id})`
+        };
+      } else if (data.error && data.error.message) {
+        throw new Error(`TikTok: ${data.error.message}`);
+      }
+    } catch (localErr) {
+      if (localErr.message && localErr.message.startsWith('TikTok:')) {
+        throw localErr;
+      }
+      console.warn('Local server publish fallback:', localErr);
+    }
+  }
+
+  // 2. Client-side fetch with CORS proxy fallback
   try {
     let res;
     const publishPayload = JSON.stringify({
       post_info: {
-        title: post.caption || post.title || 'Publicación SHEEP 100',
+        title: postTitle,
         privacy_level: 'PUBLIC_TO_EVERYONE',
         disable_duet: false,
         disable_comment: false,
@@ -2001,6 +2033,53 @@ async function saveTikTokConfigDirect(e) {
 }
 window.saveTikTokConfigDirect = saveTikTokConfigDirect;
 
+window.startTikTokOAuth = function(e) {
+  if (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+  }
+  const keyEl = document.getElementById('cfgTikTokClientKey');
+  const secretEl = document.getElementById('cfgTikTokClientSecret');
+  const userEl = document.getElementById('cfgTikTokUsername');
+
+  const clientKey = (keyEl ? keyEl.value : (appState.tiktokConfig?.clientKey || '')).trim();
+  const clientSecret = (secretEl ? secretEl.value : (appState.tiktokConfig?.clientSecret || '')).trim();
+  const username = (userEl ? userEl.value : (appState.tiktokConfig?.username || '@cocuyo.grafic')).trim();
+
+  if (!clientKey) {
+    showToast('⚠️ Ingresa primero tu TikTok Client Key en el campo de texto.');
+    if (keyEl) keyEl.focus();
+    return false;
+  }
+
+  // Pre-save clientKey & secret so they are preserved across redirect
+  appState.tiktokConfig = {
+    ...appState.tiktokConfig,
+    clientKey,
+    clientSecret,
+    username
+  };
+  saveStateEverywhere(true);
+
+  // Clean current URL for callback (strip any query parameters or hash)
+  const currentUrl = new URL(window.location.href);
+  const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
+  const redirectUri = currentUrl.origin + cleanPath;
+  const state = 'sheep100_' + Date.now();
+
+  const url = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
+    clientKey
+  )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}&state=${state}`;
+
+  showToast(`🚀 Redirigiendo a TikTok para autorizar...`);
+  setTimeout(() => {
+    window.location.href = url;
+  }, 250);
+  return false;
+};
+
 function initTikTokWizardEvents() {
   const form = document.getElementById('formTikTokConfig');
   if (form) {
@@ -2014,26 +2093,82 @@ function initTikTokWizardEvents() {
 
   const btnOAuth = document.getElementById('btnTikTokOAuth');
   if (btnOAuth) {
-    btnOAuth.addEventListener('click', () => {
-      const clientKey = (document.getElementById('cfgTikTokClientKey').value || '').trim();
-      if (!clientKey) {
-        showToast('⚠️ Ingresa primero tu TikTok Client Key en el campo de arriba.');
-        return;
-      }
-      const currentUrl = new URL(window.location.href);
-      const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
-      const redirectUri = currentUrl.origin + cleanPath;
-      const state = 'sheep100_' + Date.now();
-      const url = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
-        clientKey
-      )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
-        redirectUri
-      )}&state=${state}`;
-      window.open(url, '_blank');
-      showToast(`🚀 Abriendo autorización de TikTok con Redirect URI: ${redirectUri}`);
-    });
+    btnOAuth.addEventListener('click', (e) => window.startTikTokOAuth(e));
   }
 }
+
+function showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri) {
+  let modal = document.getElementById('modalTikTokCodeAssistant');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modalTikTokCodeAssistant';
+    modal.className = 'modal active';
+    modal.style.zIndex = '99999';
+    document.body.appendChild(modal);
+  }
+
+  const psCmd = `$r = Invoke-RestMethod -Uri 'https://open.tiktokapis.com/v2/oauth/token/' -Method Post -Body @{ client_key='${clientKey}'; client_secret='${clientSecret}'; code='${code}'; grant_type='authorization_code'; redirect_uri='${redirectUri}' }; $r.data.access_token`;
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:560px;background:#131828;border:1px solid #3b82f6;color:#e2e8f0;border-radius:12px;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h3 style="margin:0;color:#60a5fa;display:flex;align-items:center;gap:8px;">
+          🎉 Código de TikTok Recibido
+        </h3>
+        <button type="button" class="btn-outline btn-xs" onclick="document.getElementById('modalTikTokCodeAssistant').classList.remove('active'); window.history.replaceState({}, document.title, window.location.pathname);">✕</button>
+      </div>
+
+      <p style="font-size:0.9rem;line-height:1.4;margin-bottom:12px;">
+        ¡TikTok ha validado la autorización con éxito!
+      </p>
+
+      <div style="background:#0b0f1a;padding:12px;border-radius:8px;border:1px solid #1e293b;margin-bottom:14px;">
+        <label style="font-size:0.75rem;color:#94a3b8;font-weight:600;display:block;margin-bottom:4px;">CÓDIGO DE AUTORIZACIÓN (CODE):</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" readonly value="${code}" style="font-family:monospace;font-size:0.85rem;background:#030712;color:#38bdf8;border:1px solid #334155;padding:6px 10px;border-radius:6px;width:100%;" />
+          <button type="button" class="btn-primary btn-sm" onclick="navigator.clipboard.writeText('${code}'); showToast('📋 Código copiado');">Copiar</button>
+        </div>
+      </div>
+
+      <p style="font-size:0.85rem;line-height:1.4;color:#cbd5e1;margin-bottom:8px;">
+        Para completar la conexión, canjea el código ejecutando este comando en tu PowerShell (tarda 3 segundos):
+      </p>
+
+      <div style="background:#0b0f1a;padding:12px;border-radius:8px;border:1px solid #1e293b;margin-bottom:14px;">
+        <textarea id="txtTikTokPsCmd" readonly style="font-family:monospace;font-size:0.78rem;background:#030712;color:#a7f3d0;border:1px solid #334155;padding:8px;border-radius:6px;width:100%;height:68px;resize:none;">${psCmd}</textarea>
+        <button type="button" class="btn-outline btn-sm full-width" style="margin-top:6px;" onclick="navigator.clipboard.writeText(document.getElementById('txtTikTokPsCmd').value); showToast('📋 Comando PowerShell copiado al portapapeles');">
+          📋 Copiar Comando PowerShell
+        </button>
+      </div>
+
+      <label style="font-size:0.8rem;color:#e2e8f0;font-weight:600;display:block;margin-bottom:6px;">Pega aquí tu Access Token generado:</label>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input type="text" id="assistantTokenInput" placeholder="act.example_access_token..." style="background:#030712;color:#fff;border:1px solid #334155;padding:8px 12px;border-radius:6px;width:100%;" />
+        <button type="button" class="btn-primary btn-sm" onclick="window.saveTokenFromAssistant()">💾 Guardar</button>
+      </div>
+    </div>
+  `;
+  modal.classList.add('active');
+}
+
+window.saveTokenFromAssistant = async function() {
+  const token = (document.getElementById('assistantTokenInput')?.value || '').trim();
+  if (!token) {
+    showToast('⚠️ Pega primero el Access Token en el campo.');
+    return;
+  }
+  appState.tiktokConfig = {
+    ...appState.tiktokConfig,
+    accessToken: token,
+    connected: true
+  };
+  await saveStateEverywhere(true);
+  const modal = document.getElementById('modalTikTokCodeAssistant');
+  if (modal) modal.classList.remove('active');
+  window.history.replaceState({}, document.title, window.location.pathname);
+  renderAll();
+  showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
+};
 
 async function checkTikTokOAuthCallback() {
   const params = new URLSearchParams(window.location.search);
@@ -2049,57 +2184,78 @@ async function checkTikTokOAuthCallback() {
   const clientKey = (tt.clientKey || document.getElementById('cfgTikTokClientKey')?.value || '').trim();
   const clientSecret = (tt.clientSecret || document.getElementById('cfgTikTokClientSecret')?.value || '').trim();
 
-  if (!clientKey || !clientSecret) {
-    showToast('⚠️ Código de TikTok recibido. Guarda tu Client Key y Client Secret en "Paso a Paso TikTok" para completar la vinculación.');
-    return;
+  const currentUrl = new URL(window.location.href);
+  const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
+  const redirectUri = currentUrl.origin + cleanPath;
+
+  let exchangedToken = null;
+
+  // 1. If running on localhost, attempt direct exchange through local Express backend
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    try {
+      const srvRes = await fetch('/api/tiktok/exchange-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_key: clientKey,
+          client_secret: clientSecret,
+          code,
+          redirect_uri: redirectUri
+        })
+      });
+      const data = await srvRes.json();
+      if (srvRes.ok && data.data?.access_token) {
+        exchangedToken = data.data.access_token;
+      }
+    } catch (err) {
+      console.warn('Local exchange note:', err);
+    }
   }
 
-  showToast('⏳ Vinculando cuenta de TikTok y canjeando Access Token...');
-  try {
-    const currentUrl = new URL(window.location.href);
-    const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
-    const redirectUri = currentUrl.origin + cleanPath;
-
-    const bodyParams = new URLSearchParams();
-    bodyParams.append('client_key', clientKey);
-    bodyParams.append('client_secret', clientSecret);
-    bodyParams.append('code', code);
-    bodyParams.append('grant_type', 'authorization_code');
-    bodyParams.append('redirect_uri', redirectUri);
-
-    let res;
+  // 2. Try proxy exchange
+  if (!exchangedToken && clientKey && clientSecret) {
     try {
-      res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: bodyParams.toString()
-      });
-    } catch (_) {
-      res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://open.tiktokapis.com/v2/oauth/token/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: bodyParams.toString()
-      });
-    }
-    const data = await res.json();
-    if (res.ok && data.data?.access_token) {
-      appState.tiktokConfig = {
-        ...appState.tiktokConfig,
-        accessToken: data.data.access_token,
-        openId: data.data.open_id || '',
-        connected: true
-      };
-      await saveStateEverywhere(true);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      renderAll();
-      showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
-    } else {
-      const errDetail = data.error?.message || data.message || 'Error canjeando token';
-      showToast(`⚠️ TikTok API: ${errDetail}. Puedes copiar y pegar el Access Token directamente en el campo.`);
-    }
-  } catch (err) {
-    console.warn('OAuth token exchange note:', err);
-    showToast('ℹ️ Si el navegador bloquea la llamada por CORS, puedes pegar tu Access Token directo en "Paso a Paso TikTok".');
+      const bodyParams = new URLSearchParams();
+      bodyParams.append('client_key', clientKey);
+      bodyParams.append('client_secret', clientSecret);
+      bodyParams.append('code', code);
+      bodyParams.append('grant_type', 'authorization_code');
+      bodyParams.append('redirect_uri', redirectUri);
+
+      let res;
+      try {
+        res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+      } catch (_) {
+        res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://open.tiktokapis.com/v2/oauth/token/'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+      }
+      const data = await res.json();
+      if (res.ok && data.data?.access_token) {
+        exchangedToken = data.data.access_token;
+      }
+    } catch (_) {}
+  }
+
+  if (exchangedToken) {
+    appState.tiktokConfig = {
+      ...appState.tiktokConfig,
+      accessToken: exchangedToken,
+      connected: true
+    };
+    await saveStateEverywhere(true);
+    window.history.replaceState({}, document.title, window.location.pathname);
+    renderAll();
+    showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
+  } else {
+    // Show the interactive helper modal so the user is never stuck
+    showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri);
   }
 }
 

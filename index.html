@@ -780,7 +780,7 @@ Body: {
                     Ingresa tus credenciales obtenidas en TikTok Developers para habilitar la auto-publicación de videos.
                   </p>
 
-                  <form id="formTikTokConfig" class="wizard-config-form" onsubmit="event.preventDefault(); window.saveTikTokConfigDirect && window.saveTikTokConfigDirect(event); return false;">
+                  <form id="formTikTokConfig" class="wizard-config-form" onsubmit="event.preventDefault(); return window.saveTikTokConfigDirect ? window.saveTikTokConfigDirect(event) : false;">
                     <label>TikTok Client Key</label>
                     <input type="text" id="cfgTikTokClientKey" placeholder="Pega aquí tu Client Key copiado de TikTok" required />
 
@@ -794,10 +794,10 @@ Body: {
                     <textarea id="cfgTikTokAccessToken" rows="2" placeholder="act.example_access_token..."></textarea>
 
                     <div class="form-row-2" style="margin-top:10px;">
-                      <button type="button" class="btn-outline full-width" id="btnTikTokOAuth">
+                      <button type="button" class="btn-outline full-width" id="btnTikTokOAuth" onclick="return window.startTikTokOAuth ? window.startTikTokOAuth(event) : false;">
                         🔗 Autorizar con TikTok (OAuth)
                       </button>
-                      <button type="button" class="btn-primary full-width" id="btnSaveTikTok" onclick="window.saveTikTokConfigDirect && window.saveTikTokConfigDirect(event);">
+                      <button type="button" class="btn-primary full-width" id="btnSaveTikTok" onclick="return window.saveTikTokConfigDirect ? window.saveTikTokConfigDirect(event) : false;">
                         💾 Guardar TikTok
                       </button>
                     </div>
@@ -1001,6 +1001,6 @@ Body: {
   <!-- TOAST NOTIFICATION -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="./app.js?v=2.8"></script>
+  <script src="./app.js?v=2.9"></script>
 </body>
 </html>

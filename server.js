@@ -69,6 +69,68 @@ app.get('/api/resolve-media-url', async (req, res) => {
   }
 });
 
+// TikTok OAuth token exchange helper (no CORS restrictions on server)
+app.post('/api/tiktok/exchange-code', async (req, res) => {
+  const { client_key, client_secret, code, redirect_uri } = req.body || {};
+  if (!client_key || !client_secret || !code) {
+    return res.status(400).json({ error: 'Faltan parámetros requeridos (client_key, client_secret, code)' });
+  }
+  try {
+    const bodyParams = new URLSearchParams();
+    bodyParams.append('client_key', client_key);
+    bodyParams.append('client_secret', client_secret);
+    bodyParams.append('code', code);
+    bodyParams.append('grant_type', 'authorization_code');
+    bodyParams.append('redirect_uri', redirect_uri);
+
+    const ttRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: bodyParams.toString()
+    });
+    const data = await ttRes.json();
+    return res.status(ttRes.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Error comunicando con TikTok API' });
+  }
+});
+
+// TikTok direct video publisher via server
+app.post('/api/tiktok/publish-video', async (req, res) => {
+  const { accessToken, mediaUrl, title } = req.body || {};
+  if (!accessToken || !mediaUrl) {
+    return res.status(400).json({ error: 'Faltan parámetros requeridos (accessToken, mediaUrl)' });
+  }
+  try {
+    const directUrl = await resolveDirectMediaUrl(mediaUrl);
+    const publishPayload = {
+      post_info: {
+        title: title || 'Publicación SHEEP 100',
+        privacy_level: 'PUBLIC_TO_EVERYONE',
+        disable_duet: false,
+        disable_comment: false,
+        disable_stitch: false
+      },
+      source_info: {
+        source: 'PULL_FROM_URL',
+        video_url: directUrl
+      }
+    };
+    const ttRes = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify(publishPayload)
+    });
+    const data = await ttRes.json();
+    return res.status(ttRes.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Error publicando en TikTok API' });
+  }
+});
+
 // Configure Multer for media uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
