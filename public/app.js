@@ -2033,24 +2033,14 @@ async function saveTikTokConfigDirect(e) {
 }
 window.saveTikTokConfigDirect = saveTikTokConfigDirect;
 
-window.startTikTokOAuth = function(e) {
-  if (e) {
-    if (e.preventDefault) e.preventDefault();
-    if (e.stopPropagation) e.stopPropagation();
-  }
+window.handleTikTokLinkClick = function(e, el) {
   const keyEl = document.getElementById('cfgTikTokClientKey');
   const secretEl = document.getElementById('cfgTikTokClientSecret');
   const userEl = document.getElementById('cfgTikTokUsername');
 
-  const clientKey = (keyEl ? keyEl.value : (appState.tiktokConfig?.clientKey || '')).trim();
+  const clientKey = (keyEl ? keyEl.value : (appState.tiktokConfig?.clientKey || '')).trim() || 'sbawbyxlo8yktgrxxv';
   const clientSecret = (secretEl ? secretEl.value : (appState.tiktokConfig?.clientSecret || '')).trim();
   const username = (userEl ? userEl.value : (appState.tiktokConfig?.username || '@cocuyo.grafic')).trim();
-
-  if (!clientKey) {
-    showToast('⚠️ Ingresa primero tu TikTok Client Key en el campo de texto.');
-    if (keyEl) keyEl.focus();
-    return false;
-  }
 
   // Pre-save clientKey & secret so they are preserved across redirect
   appState.tiktokConfig = {
@@ -2073,12 +2063,16 @@ window.startTikTokOAuth = function(e) {
     redirectUri
   )}&state=${state}`;
 
-  showToast(`🚀 Redirigiendo a TikTok para autorizar...`);
-  setTimeout(() => {
-    window.location.href = url;
-  }, 250);
-  return false;
+  if (el) el.href = url;
+  const linkTab = document.getElementById('linkTikTokNewTab');
+  if (linkTab) linkTab.href = url;
+
+  showToast('🚀 Redirigiendo a TikTok para autorizar...');
+  // Immediate navigation while user gesture is active
+  window.location.assign(url);
+  return true;
 };
+window.startTikTokOAuth = window.handleTikTokLinkClick;
 
 function initTikTokWizardEvents() {
   const form = document.getElementById('formTikTokConfig');
@@ -2093,7 +2087,7 @@ function initTikTokWizardEvents() {
 
   const btnOAuth = document.getElementById('btnTikTokOAuth');
   if (btnOAuth) {
-    btnOAuth.addEventListener('click', (e) => window.startTikTokOAuth(e));
+    btnOAuth.addEventListener('click', (e) => window.handleTikTokLinkClick(e, btnOAuth));
   }
 }
 
@@ -2294,6 +2288,22 @@ function renderTikTokWizardState() {
   setValIfIdle('cfgTikTokClientSecret', tt.clientSecret);
   setValIfIdle('cfgTikTokAccessToken', tt.accessToken);
   setValIfIdle('cfgTikTokUsername', tt.username || '@cocuyo.grafic');
+
+  // Pre-calculate direct OAuth links
+  const clientKey = tt.clientKey || 'sbawbyxlo8yktgrxxv';
+  const currentUrl = new URL(window.location.href);
+  const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
+  const redirectUri = currentUrl.origin + cleanPath;
+  const directOAuthUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
+    clientKey
+  )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}&state=sheep100`;
+
+  const btnOAuth = document.getElementById('btnTikTokOAuth');
+  if (btnOAuth) btnOAuth.href = directOAuthUrl;
+  const linkTab = document.getElementById('linkTikTokNewTab');
+  if (linkTab) linkTab.href = directOAuthUrl;
 
   const badge = document.getElementById('tiktokProgressBadge');
   if (badge) badge.textContent = isConn ? 'Conectado (Listo)' : (hasCreds ? 'Falta Autorizar' : 'Modo Sandbox');
