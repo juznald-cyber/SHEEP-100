@@ -2261,7 +2261,8 @@ async function checkTikTokOAuthCallback() {
 
 function renderTikTokStatusSidebar() {
   const tt = appState.tiktokConfig || {};
-  const isConn = Boolean(tt.connected || (tt.clientKey && (tt.clientSecret || tt.accessToken)));
+  const isConn = Boolean(tt.accessToken);
+  const hasCreds = Boolean(tt.clientKey && tt.clientSecret);
   const dot = document.getElementById('tiktokStatusDot');
   const title = document.getElementById('tiktokStatusTitle');
   const desc = document.getElementById('tiktokStatusDesc');
@@ -2269,18 +2270,20 @@ function renderTikTokStatusSidebar() {
   if (dot) dot.classList.toggle('connected', isConn);
   if (title) {
     const cleanUser = (tt.username || 'cocuyo.grafic').replace(/^@+/, '');
-    title.textContent = isConn ? `TikTok: @${cleanUser}` : 'TikTok: Pendiente';
+    title.textContent = isConn ? `TikTok: @${cleanUser}` : (hasCreds ? 'TikTok: Falta Token' : 'TikTok: Desconectado');
   }
   if (desc) {
     desc.textContent = isConn
-      ? 'TikTok Content Posting API lista en Modo Sandbox.'
-      : 'Conecta @cocuyo.grafic en Modo Sandbox.';
+      ? 'TikTok Content Posting API lista para publicar.'
+      : (hasCreds ? 'Credenciales guardadas. Pulsa Autorizar con TikTok.' : 'Conecta @cocuyo.grafic en Modo Sandbox.');
   }
 }
 
 function renderTikTokWizardState() {
   const tt = appState.tiktokConfig || {};
-  const isConn = Boolean(tt.connected || (tt.clientKey && (tt.clientSecret || tt.accessToken)));
+  const hasCreds = Boolean(tt.clientKey && tt.clientSecret);
+  const hasToken = Boolean(tt.accessToken);
+  const isConn = Boolean(hasToken);
 
   const setValIfIdle = (id, val) => {
     const el = document.getElementById(id);
@@ -2293,18 +2296,18 @@ function renderTikTokWizardState() {
   setValIfIdle('cfgTikTokUsername', tt.username || '@cocuyo.grafic');
 
   const badge = document.getElementById('tiktokProgressBadge');
-  if (badge) badge.textContent = isConn ? 'Conectado (Sandbox)' : 'Modo Sandbox';
+  if (badge) badge.textContent = isConn ? 'Conectado (Listo)' : (hasCreds ? 'Falta Autorizar' : 'Modo Sandbox');
 
   const pctEl = document.getElementById('tiktokPercentText');
-  if (pctEl) pctEl.textContent = isConn ? '100%' : (tt.clientKey ? '75%' : '50%');
+  if (pctEl) pctEl.textContent = isConn ? '100%' : (hasCreds ? '75%' : '50%');
 
   const step3Chk = document.getElementById('chkTikTokStep3');
-  if (step3Chk) step3Chk.checked = Boolean(tt.clientKey && tt.clientSecret);
+  if (step3Chk) step3Chk.checked = hasCreds;
   const step4Chk = document.getElementById('chkTikTokStep4');
   if (step4Chk) step4Chk.checked = isConn;
 
   const card3 = document.getElementById('card-tiktok-step3');
-  if (card3) card3.classList.toggle('completed', Boolean(tt.clientKey && tt.clientSecret));
+  if (card3) card3.classList.toggle('completed', hasCreds);
   const card4 = document.getElementById('card-tiktok-step4');
   if (card4) card4.classList.toggle('completed', isConn);
 
@@ -2313,9 +2316,19 @@ function renderTikTokWizardState() {
     if (isConn) {
       feedback.classList.remove('hidden', 'err');
       feedback.classList.add('ok');
-      feedback.innerHTML = `✅ <strong>¡TikTok Conectado!</strong> Cuenta: <b>${escapeHtml(
+      feedback.style.borderColor = '#10b981';
+      feedback.style.color = '#34d399';
+      feedback.style.background = 'rgba(16, 185, 129, 0.12)';
+      feedback.innerHTML = `✅ <strong>¡TikTok Conectado con Access Token!</strong> Cuenta: <b>${escapeHtml(
         tt.username || '@cocuyo.grafic'
-      )}</b> lista en Modo Sandbox para auto-publicar videos MP4.`;
+      )}</b> lista para auto-publicar videos MP4.`;
+    } else if (hasCreds) {
+      feedback.classList.remove('hidden', 'ok');
+      feedback.classList.add('err');
+      feedback.style.borderColor = '#f59e0b';
+      feedback.style.color = '#fbbf24';
+      feedback.style.background = 'rgba(245, 158, 11, 0.12)';
+      feedback.innerHTML = `⚠️ <strong>Credenciales guardadas, pero falta el Access Token.</strong> Haz clic en el botón <b>"🔗 Autorizar con TikTok (OAuth)"</b> para vincular tu cuenta y poder publicar.`;
     } else {
       feedback.classList.add('hidden');
     }
