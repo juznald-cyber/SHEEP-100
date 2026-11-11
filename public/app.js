@@ -663,6 +663,33 @@ window.switchTab = switchTab;
 // ==========================================
 // CALENDAR & DRAG-AND-DROP
 // ==========================================
+function getMediaThumbnailUrl(item) {
+  if (!item) return './icon.svg';
+  const rawUrl = (
+    typeof item === 'string'
+      ? item
+      : (item.publicMediaUrl || item.mediaUrl || item.publicUrl || item.url || '') + ''
+  ).trim();
+
+  if (!rawUrl) return './icon.svg';
+
+  // 1. Google Drive (file / folder / view / download)
+  if (rawUrl.includes('drive.google.com') || rawUrl.includes('drive.usercontent.google.com')) {
+    const match = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+
+  // 2. Video fallback placeholder if it's an MP4 URL and not an image
+  if (/\.mp4(\?|$)/i.test(rawUrl)) {
+    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231e1b4b"/><polygon points="38,30 72,50 38,70" fill="%23818cf8"/><text x="50" y="88" fill="%23cbd5e1" font-size="11" font-family="sans-serif" text-anchor="middle">VIDEO</text></svg>`;
+  }
+
+  return rawUrl;
+}
+window.getMediaThumbnailUrl = getMediaThumbnailUrl;
+
 function renderCalendarMediaDrawer() {
   const container = document.getElementById('calendarMediaDrawer');
   if (!container) return;
@@ -676,7 +703,7 @@ function renderCalendarMediaDrawer() {
     .map(
       (m) => `
       <div class="drawer-media-item" draggable="true" data-drag-type="media" data-media-id="${m.id}" title="Arrastra a un día del calendario: ${escapeHtml(m.title)}">
-        <img src="${m.url}" alt="${escapeHtml(m.title)}" />
+        <img src="${escapeHtml(getMediaThumbnailUrl(m))}" alt="${escapeHtml(m.title)}" onerror="this.onerror=null; this.src='./icon.svg';" />
         <div class="media-tag-overlay">${m.format} • ${escapeHtml(m.title)}</div>
       </div>
     `
@@ -755,7 +782,7 @@ function renderWeekCalendar() {
             });
             return `
               <div class="cal-post-card status-${p.status}" draggable="true" data-post-id="${p.id}">
-                ${p.mediaUrl ? `<img src="${p.mediaUrl}" class="cal-post-thumb" alt="" />` : ''}
+                ${(p.mediaUrl || p.publicMediaUrl) ? `<img src="${escapeHtml(getMediaThumbnailUrl(p))}" class="cal-post-thumb" alt="" onerror="this.onerror=null; this.src='./icon.svg';" />` : ''}
                 <div class="cal-post-time">
                   <span>⏰ ${t}</span>
                   <span>${p.platforms?.includes('instagram') ? '📸' : ''} ${p.platforms?.includes('tiktok') ? '🎵' : ''}</span>
@@ -856,7 +883,7 @@ function renderPostsQueue() {
       return `
         <div class="queue-row">
           <div class="queue-row-left">
-            <img src="${p.mediaUrl || './icon.svg'}" class="queue-thumb" alt="" />
+            <img src="${escapeHtml(getMediaThumbnailUrl(p))}" class="queue-thumb" alt="" onerror="this.onerror=null; this.src='./icon.svg';" />
             <div>
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <strong>${escapeHtml(p.title)}</strong>
@@ -895,7 +922,8 @@ async function executeMetaPublishFlow(post) {
   const accessToken = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
   const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const mediaUrl = await autoConvertMediaUrl(rawUrl);
+  const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4(\?|$)/i.test(rawUrl);
+  const mediaUrl = await autoConvertMediaUrl(rawUrl, isVideo ? 'REELS' : 'IMAGE');
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   if (!accessToken || !igUserId) {
@@ -927,7 +955,7 @@ async function executeMetaPublishFlow(post) {
   containerParams.append('caption', post.caption || '');
   containerParams.append('access_token', accessToken);
 
-  if (post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+  if (isVideo) {
     containerParams.append('media_type', 'REELS');
     containerParams.append('video_url', mediaUrl);
   } else {
@@ -946,6 +974,40 @@ async function executeMetaPublishFlow(post) {
   }
 
   const creationId = step1Data.id;
+
+  // Step 1.5: Para videos (REELS), Meta procesa el archivo de forma asíncrona.
+  // Es OBLIGATORIO esperar a status_code == 'FINISHED' antes de invocar media_publish,
+  // de lo contrario Meta arroja "Media ID is not available".
+  if (isVideo) {
+    let isReady = false;
+    let attempts = 0;
+    const maxAttempts = 20; // Hasta ~60 segundos
+    while (!isReady && attempts < maxAttempts) {
+      attempts++;
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const checkRes = await fetch(
+          `${graphBase}/${creationId}?fields=status_code,status&access_token=${accessToken}`
+        );
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData.status_code === 'FINISHED') {
+            isReady = true;
+            break;
+          } else if (checkData.status_code === 'ERROR') {
+            throw new Error(`Meta falló al procesar el video: ${checkData.status || 'Formato o códec incompatible con Instagram'}`);
+          } else if (checkData.status_code === 'EXPIRED') {
+            throw new Error('El contenedor del video en Meta expiró.');
+          }
+        }
+      } catch (err) {
+        if (err.message && err.message.includes('Meta falló')) throw err;
+      }
+    }
+    if (!isReady) {
+      throw new Error('Meta tardó más de 60 segundos en procesar el video. Intenta publicarlo nuevamente en unos momentos.');
+    }
+  }
 
   // Step 2: Publish container (media_publish)
   const publishParams = new URLSearchParams();
@@ -976,7 +1038,8 @@ async function executeFacebookPagePublish(post) {
   const accessToken = (cfg.accessToken || '').trim();
   const fbPageId = (cfg.fbPageId || '').trim();
   const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const mediaUrl = await autoConvertMediaUrl(rawUrl);
+  const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4(\?|$)/i.test(rawUrl);
+  const mediaUrl = await autoConvertMediaUrl(rawUrl, isVideo ? 'REELS' : 'IMAGE');
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   if (!accessToken || !fbPageId) {
@@ -995,12 +1058,18 @@ async function executeFacebookPagePublish(post) {
 
   try {
     const graphBase = 'https://graph.facebook.com/v21.0';
+    const endpoint = isVideo ? 'videos' : 'photos';
     const params = new URLSearchParams();
-    params.append('caption', post.caption || '');
-    params.append('url', mediaUrl);
+    if (isVideo) {
+      params.append('description', post.caption || '');
+      params.append('file_url', mediaUrl);
+    } else {
+      params.append('caption', post.caption || '');
+      params.append('url', mediaUrl);
+    }
     params.append('access_token', accessToken);
 
-    const res = await fetch(`${graphBase}/${fbPageId}/photos`, {
+    const res = await fetch(`${graphBase}/${fbPageId}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
@@ -1018,9 +1087,9 @@ async function executeFacebookPagePublish(post) {
 async function executeTikTokPublish(post) {
   const ttCfg = appState.tiktokConfig || {};
   const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const mediaUrl = await autoConvertMediaUrl(rawUrl);
+  const mediaUrl = await autoConvertMediaUrl(rawUrl, 'REELS');
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
-  const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4/i.test(mediaUrl);
+  const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4(\?|$)/i.test(mediaUrl);
 
   if (!ttCfg.accessToken && !ttCfg.clientKey) {
     return {
@@ -1107,12 +1176,13 @@ async function executeMultiPlatformPublish(post) {
     }
   }
 
-  if (errors.length && !results.length) {
-    throw new Error(errors.join(' | '));
+  if (errors.length > 0 && results.length === 0) {
+    throw new Error(errors.join(' • '));
   }
 
   return {
     success: true,
+    hasPartialErrors: errors.length > 0,
     message: results.concat(errors).join(' • ')
   };
 }
@@ -1229,7 +1299,7 @@ function renderInstagramGrid() {
     .map(
       (p) => `
       <div class="ig-cell" draggable="true" data-post-id="${p.id}">
-        <img src="${p.mediaUrl || './icon.svg'}" alt="${escapeHtml(p.title)}" />
+        <img src="${escapeHtml(getMediaThumbnailUrl(p))}" alt="${escapeHtml(p.title)}" onerror="this.onerror=null; this.src='./icon.svg';" />
         <span class="ig-cell-badge">${p.status === 'published' ? '✔' : '⏰'}</span>
       </div>
     `
@@ -1998,37 +2068,21 @@ function renderTikTokWizardState() {
   }
 }
 
-// ==========================================
-// POST COMPOSER MODAL
-// ==========================================
-function initComposerEvents() {
-  document.getElementById('btnOpenComposer').addEventListener('click', () => openComposerModal());
-  document.getElementById('btnCloseComposer').addEventListener('click', closeComposerModal);
-  document.getElementById('btnCancelComposer').addEventListener('click', closeComposerModal);
-
-  const mediaTypeSelect = document.getElementById('postMediaType');
-  if (mediaTypeSelect) {
-    mediaTypeSelect.addEventListener('change', async () => {
-      const urlEl = document.getElementById('postPublicMediaUrl');
-      if (urlEl && urlEl.value) {
-        const converted = await autoConvertMediaUrl(urlEl.value);
-        urlEl.value = converted;
-        updateComposerPreview(converted);
-      }
-    });
+function resolveDirectDriveUrl(rawUrl, isVideo = false) {
+  if (!rawUrl || typeof rawUrl !== 'string') return rawUrl;
+  const m = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m && m[1]) {
+    const fileId = m[1];
+    return isVideo
+      ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
+      : `https://lh3.googleusercontent.com/d/${fileId}`;
   }
-
-  const mediaSelect = document.getElementById('postMediaSelect');
-  mediaSelect.addEventListener('change', () => {
-    const media = appState.mediaLibrary.find((m) => m.id === mediaSelect.value);
-    if (media) {
-      document.getElementById('postPublicMediaUrl').value = media.publicUrl || media.url;
-      updateComposerPreview(media.url);
-    }
-  });
+  return rawUrl;
+}
+window.resolveDirectDriveUrl = resolveDirectDriveUrl;
 
 // Helper to automatically convert cloud storage viewer links (OneDrive, Google Drive, Dropbox) into direct download links
-async function autoConvertMediaUrl(raw) {
+async function autoConvertMediaUrl(raw, explicitMediaType = null) {
   if (!raw || typeof raw !== 'string') return raw;
   let url = raw.trim();
 
@@ -2068,12 +2122,11 @@ async function autoConvertMediaUrl(raw) {
     const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (m && m[1]) {
       const fileId = m[1];
-      const type = document.getElementById('postMediaType')?.value;
-      if (type === 'REELS' || type === 'VIDEO') {
-        return `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
-      } else {
-        return `https://lh3.googleusercontent.com/d/${fileId}`;
-      }
+      const type = explicitMediaType || document.getElementById('postMediaType')?.value || 'IMAGE';
+      const isVideo = type === 'REELS' || type === 'VIDEO' || /\.mp4(\?|$)/i.test(url) || url.includes('export=download');
+      return isVideo
+        ? `https://drive.usercontent.google.com/download?id=${fileId}&export=download`
+        : `https://lh3.googleusercontent.com/d/${fileId}`;
     }
   }
 
@@ -2088,6 +2141,41 @@ async function autoConvertMediaUrl(raw) {
 }
 window.autoConvertMediaUrl = autoConvertMediaUrl;
 
+// ==========================================
+// POST COMPOSER MODAL
+// ==========================================
+function initComposerEvents() {
+  document.getElementById('btnOpenComposer').addEventListener('click', () => openComposerModal());
+  document.getElementById('btnCloseComposer').addEventListener('click', closeComposerModal);
+  document.getElementById('btnCancelComposer').addEventListener('click', closeComposerModal);
+
+  const mediaTypeSelect = document.getElementById('postMediaType');
+  if (mediaTypeSelect) {
+    mediaTypeSelect.addEventListener('change', async () => {
+      const isVideo = (mediaTypeSelect.value === 'REELS' || mediaTypeSelect.value === 'VIDEO');
+      const urlEl = document.getElementById('postPublicMediaUrl');
+      if (urlEl && urlEl.value) {
+        const converted = resolveDirectDriveUrl(urlEl.value, isVideo);
+        urlEl.value = converted;
+        updateComposerPreview(converted);
+      }
+    });
+  }
+
+  const mediaSelect = document.getElementById('postMediaSelect');
+  if (mediaSelect) {
+    mediaSelect.addEventListener('change', () => {
+      const media = appState.mediaLibrary.find((m) => m.id === mediaSelect.value);
+      if (media) {
+        const isVideo = (media.type === 'video' || media.format === 'MP4');
+        document.getElementById('postMediaType').value = isVideo ? 'REELS' : 'IMAGE';
+        const directUrl = resolveDirectDriveUrl(media.publicUrl || media.url, isVideo);
+        document.getElementById('postPublicMediaUrl').value = directUrl;
+        updateComposerPreview(directUrl);
+      }
+    });
+  }
+
   const urlInput = document.getElementById('postPublicMediaUrl');
   if (urlInput) {
     urlInput.addEventListener('input', (e) => {
@@ -2095,7 +2183,8 @@ window.autoConvertMediaUrl = autoConvertMediaUrl;
     });
     urlInput.addEventListener('paste', () => {
       setTimeout(async () => {
-        const converted = await autoConvertMediaUrl(urlInput.value);
+        const isVideo = document.getElementById('postMediaType')?.value === 'REELS';
+        const converted = await autoConvertMediaUrl(urlInput.value, isVideo ? 'REELS' : 'IMAGE');
         if (converted && converted !== urlInput.value) {
           urlInput.value = converted;
           updateComposerPreview(converted);
@@ -2104,7 +2193,8 @@ window.autoConvertMediaUrl = autoConvertMediaUrl;
       }, 50);
     });
     urlInput.addEventListener('change', async () => {
-      const converted = await autoConvertMediaUrl(urlInput.value);
+      const isVideo = document.getElementById('postMediaType')?.value === 'REELS';
+      const converted = await autoConvertMediaUrl(urlInput.value, isVideo ? 'REELS' : 'IMAGE');
       if (converted && converted !== urlInput.value) {
         urlInput.value = converted;
         updateComposerPreview(converted);
@@ -2129,8 +2219,9 @@ window.autoConvertMediaUrl = autoConvertMediaUrl;
       ? new Date(scheduledLocal).toISOString()
       : new Date().toISOString();
 
+    const mediaTypeVal = document.getElementById('postMediaType').value;
     let mediaUrlVal = document.getElementById('postPublicMediaUrl').value.trim();
-    mediaUrlVal = await autoConvertMediaUrl(mediaUrlVal);
+    mediaUrlVal = await autoConvertMediaUrl(mediaUrlVal, mediaTypeVal);
     const existingId = document.getElementById('postId').value;
 
     if (existingId) {
@@ -2143,7 +2234,7 @@ window.autoConvertMediaUrl = autoConvertMediaUrl;
           mediaId: document.getElementById('postMediaSelect').value || null,
           mediaUrl: mediaUrlVal,
           publicMediaUrl: mediaUrlVal,
-          mediaType: document.getElementById('postMediaType').value,
+          mediaType: mediaTypeVal,
           platforms: platforms.length ? platforms : ['instagram'],
           scheduledAt: scheduledIso,
           status: document.getElementById('postStatus').value,
@@ -2158,7 +2249,7 @@ window.autoConvertMediaUrl = autoConvertMediaUrl;
         mediaId: document.getElementById('postMediaSelect').value || null,
         mediaUrl: mediaUrlVal,
         publicMediaUrl: mediaUrlVal,
-        mediaType: document.getElementById('postMediaType').value,
+        mediaType: mediaTypeVal,
         platforms: platforms.length ? platforms : ['instagram'],
         scheduledAt: scheduledIso,
         status: document.getElementById('postStatus').value,
@@ -2189,23 +2280,31 @@ function populateComposerMediaDropdown() {
 
 function updateComposerPreview(url) {
   const box = document.getElementById('composerMediaPreview');
+  if (!box) return;
   const type = document.getElementById('postMediaType')?.value;
   if (!url) {
     box.innerHTML = `<span>Selecciona un medio o pega una URL</span>`;
     return;
   }
   const isVideo = type === 'REELS' || type === 'VIDEO' || /\.mp4(\?|$)/i.test(url) || url.includes('export=download');
+
+  let cleanUrl = url.trim();
+  const fileIdMatch = cleanUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || cleanUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+
   if (isVideo) {
-    box.innerHTML = `<video src="${escapeHtml(url)}" controls muted style="max-width:100%;max-height:200px;border-radius:8px;"></video>`;
-  } else {
-    let cleanImgUrl = url;
-    if (cleanImgUrl.includes('drive.google.com') || cleanImgUrl.includes('drive.usercontent.google.com')) {
-      const m = cleanImgUrl.match(/id=([a-zA-Z0-9_-]+)/) || cleanImgUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-      if (m && m[1]) {
-        cleanImgUrl = `https://lh3.googleusercontent.com/d/${m[1]}`;
-      }
+    if (fileIdMatch && fileIdMatch[1]) {
+      cleanUrl = `https://drive.usercontent.google.com/download?id=${fileIdMatch[1]}&export=download`;
     }
-    box.innerHTML = `<img src="${escapeHtml(cleanImgUrl)}" alt="Preview" style="max-width:100%;max-height:200px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null; this.src='${escapeHtml(url)}';" />`;
+    box.innerHTML = `
+      <video src="${escapeHtml(cleanUrl)}" controls autoplay muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;background:#000;width:100%;">
+        Tu navegador no soporta reproducción directa de video.
+      </video>
+    `;
+  } else {
+    if (fileIdMatch && fileIdMatch[1]) {
+      cleanUrl = `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+    }
+    box.innerHTML = `<img src="${escapeHtml(cleanUrl)}" alt="Preview" style="max-width:100%;max-height:220px;object-fit:cover;border-radius:8px;width:100%;" onerror="this.onerror=null; this.src='${escapeHtml(url)}';" />`;
   }
 }
 
@@ -2219,13 +2318,15 @@ function openComposerModal(opts = {}) {
 
   if (opts.post) {
     const p = opts.post;
+    const isVideo = (p.mediaType === 'REELS' || p.mediaType === 'VIDEO' || /\.mp4/i.test(p.mediaUrl || ''));
     document.getElementById('composerModalTitle').textContent = '✏️ Editar Publicación';
     document.getElementById('postId').value = p.id;
     document.getElementById('postTitle').value = p.title || '';
     document.getElementById('postCaption').value = p.caption || '';
     document.getElementById('postMediaSelect').value = p.mediaId || '';
-    document.getElementById('postPublicMediaUrl').value = p.publicMediaUrl || p.mediaUrl || '';
-    document.getElementById('postMediaType').value = p.mediaType || 'IMAGE';
+    document.getElementById('postMediaType').value = isVideo ? 'REELS' : (p.mediaType || 'IMAGE');
+    const directUrl = resolveDirectDriveUrl(p.publicMediaUrl || p.mediaUrl || '', isVideo);
+    document.getElementById('postPublicMediaUrl').value = directUrl;
     document.getElementById('postFirstComment').value = p.firstComment || '';
     document.getElementById('postStatus').value = p.status === 'draft' ? 'draft' : 'scheduled';
     document.getElementById('postScheduledAt').value = toLocalDateTimeInputValue(
@@ -2234,7 +2335,7 @@ function openComposerModal(opts = {}) {
     document.querySelectorAll('input[name="postPlatform"]').forEach((chk) => {
       chk.checked = (p.platforms || []).includes(chk.value);
     });
-    updateComposerPreview(p.publicMediaUrl || p.mediaUrl);
+    updateComposerPreview(directUrl);
   } else {
     document.getElementById('composerModalTitle').textContent = '✨ Programar Nueva Publicación';
     document.getElementById('postId').value = '';
@@ -2245,17 +2346,21 @@ function openComposerModal(opts = {}) {
       const m = appState.mediaLibrary.find((item) => item.id === opts.mediaId);
       if (m) {
         document.getElementById('postMediaSelect').value = m.id;
-        document.getElementById('postPublicMediaUrl').value = m.publicUrl || m.url;
+        const isVideo = (m.type === 'video' || m.format === 'MP4');
+        document.getElementById('postMediaType').value = isVideo ? 'REELS' : 'IMAGE';
         document.getElementById('postTitle').value = m.title.replace(/\.[^.]+$/, '');
-        document.getElementById('postMediaType').value = (m.type === 'video' || m.format === 'MP4') ? 'REELS' : 'IMAGE';
-        updateComposerPreview(m.publicUrl || m.url);
+        const directUrl = resolveDirectDriveUrl(m.publicUrl || m.url, isVideo);
+        document.getElementById('postPublicMediaUrl').value = directUrl;
+        updateComposerPreview(directUrl);
       }
     } else if (appState.mediaLibrary[0]) {
       const first = appState.mediaLibrary[0];
       document.getElementById('postMediaSelect').value = first.id;
-      document.getElementById('postPublicMediaUrl').value = first.publicUrl || first.url;
-      document.getElementById('postMediaType').value = (first.type === 'video' || first.format === 'MP4') ? 'REELS' : 'IMAGE';
-      updateComposerPreview(first.publicUrl || first.url);
+      const isVideo = (first.type === 'video' || first.format === 'MP4');
+      document.getElementById('postMediaType').value = isVideo ? 'REELS' : 'IMAGE';
+      const directUrl = resolveDirectDriveUrl(first.publicUrl || first.url, isVideo);
+      document.getElementById('postPublicMediaUrl').value = directUrl;
+      updateComposerPreview(directUrl);
     }
 
     if (opts.prefillTitle) document.getElementById('postTitle').value = opts.prefillTitle;
