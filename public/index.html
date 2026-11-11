@@ -9,7 +9,7 @@
   <title>SHEEP 100 — Planificador & Automatizador Social</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="stylesheet" href="./styles.css?v=2.6" />
+  <link rel="stylesheet" href="./styles.css?v=2.7" />
 
   <!-- Firebase SDK (Cloud Firestore + Auth en Tiempo Real para sheep-100-b8a90) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -724,7 +724,7 @@ Body: {
                     </label>
                   </div>
                   <ol class="step-instructions">
-                    <li>En <em>Login Kit → Web</em> colocaste la Redirect URI: <code>https://sheep-100-b8a90.web.app/</code>.</li>
+                    <li>En <em>Login Kit → Web</em> asegúrate de tener agregada esta Redirect URI: <code>https://juznald-cyber.github.io/SHEEP-100/</code> <button type="button" class="btn-outline btn-xs" onclick="navigator.clipboard.writeText('https://juznald-cyber.github.io/SHEEP-100/'); showToast('📋 Redirect URI copiada al portapapeles');" style="margin-left:6px;padding:2px 8px;font-size:0.72rem;">Copiar</button></li>
                     <li>En <em>Content Posting API</em> activaste <strong>Direct Post</strong> en verde.</li>
                     <li>En <em>Scopes</em> marcaste: <code>video.upload</code>, <code>video.publish</code> y <code>user.info.basic</code>.</li>
                   </ol>
@@ -1001,6 +1001,6 @@ Body: {
   <!-- TOAST NOTIFICATION -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="./app.js?v=2.6"></script>
+  <script src="./app.js?v=2.7"></script>
 </body>
 </html>

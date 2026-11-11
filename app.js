@@ -205,6 +205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTikTokWizardEvents();
 
   await initFirebaseCloud();
+  await checkTikTokOAuthCallback();
   checkSavedSession();
 
   // Auto-scheduler in browser + sync check every 25s
@@ -666,10 +667,15 @@ window.switchTab = switchTab;
 function getMediaThumbnailUrl(item) {
   if (!item) return '';
   let target = item;
-  if (typeof item === 'object') {
-    if (item.mediaId && (!item.mediaUrl && !item.publicMediaUrl)) {
-      const found = appState.mediaLibrary.find((m) => m.id === item.mediaId);
-      if (found) target = found;
+  if (typeof item === 'object' && item.mediaId) {
+    const found = appState.mediaLibrary.find((m) => m.id === item.mediaId);
+    if (found) {
+      const fUrl = (found.publicUrl || found.url || '') + '';
+      if (fUrl.includes('drive.google.com') || fUrl.includes('drive.usercontent.google.com')) {
+        target = found;
+      } else if (!item.mediaUrl && !item.publicMediaUrl) {
+        target = found;
+      }
     }
   }
 
@@ -1111,56 +1117,53 @@ async function executeTikTokPublish(post) {
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
   const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4(\?|$)/i.test(mediaUrl);
 
-  if (!ttCfg.accessToken && !ttCfg.clientKey) {
-    return {
-      success: true,
-      message: 'TikTok preparado (Recordatorio listo con 1 clic)'
-    };
-  }
-
   if (!isVideo) {
-    return {
-      success: true,
-      message: 'TikTok: Foto lista para descarga rápida (la API oficial de TikTok requiere video MP4)'
-    };
+    throw new Error('TikTok exige formato de video MP4 vertical (9:16).');
   }
 
-  if (ttCfg.accessToken && isPublicHttp) {
-    try {
-      const res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ttCfg.accessToken}`,
-          'Content-Type': 'application/json; charset=UTF-8'
+  if (!ttCfg.accessToken) {
+    throw new Error('Falta el TikTok Access Token. Por favor haz clic en "Autorizar con TikTok" o pega tu Access Token en la pestaña "Paso a Paso TikTok" para publicar automáticamente.');
+  }
+
+  if (!isPublicHttp) {
+    throw new Error('TikTok requiere una URL pública https:// accesible para descargar el video.');
+  }
+
+  try {
+    const res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ttCfg.accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify({
+        post_info: {
+          title: post.caption || post.title || 'Publicación SHEEP 100',
+          privacy_level: 'PUBLIC_TO_EVERYONE',
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false
         },
-        body: JSON.stringify({
-          post_info: {
-            title: post.caption || post.title || 'Publicación SHEEP 100',
-            privacy_level: 'PUBLIC_TO_EVERYONE',
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false
-          },
-          source_info: {
-            source: 'PULL_FROM_URL',
-            video_url: mediaUrl
-          }
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.data?.publish_id) {
-        return {
-          success: true,
-          message: `¡Video enviado a TikTok Content Posting API! (Publish ID: ${data.data.publish_id})`
-        };
-      }
-    } catch (_) {}
+        source_info: {
+          source: 'PULL_FROM_URL',
+          video_url: mediaUrl
+        }
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.data?.publish_id) {
+      return {
+        success: true,
+        message: `¡Publicado exitosamente en TikTok! (Publish ID: ${data.data.publish_id})`
+      };
+    } else if (data.error && data.error.message) {
+      throw new Error(`TikTok: ${data.error.message}`);
+    } else {
+      throw new Error(`Respuesta de TikTok API: ${JSON.stringify(data)}`);
+    }
+  } catch (err) {
+    throw new Error(err.message || 'Error conectando con TikTok Content Posting API');
   }
-
-  return {
-    success: true,
-    message: `TikTok: Video programado para @${(ttCfg.username || 'cocuyo.grafic').replace(/^@+/, '')} (Modo Sandbox)`
-  };
 }
 
 // Multi-platform publisher executing across selected networks
@@ -1490,17 +1493,6 @@ function initMediaUploadEvents() {
   });
 
   document.getElementById('mediaSearchInput').addEventListener('input', renderMediaGallery);
-}
-
-function getMediaThumbnailUrl(m) {
-  const url = (m.publicUrl || m.url || '').trim();
-  if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
-    const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return `https://lh3.googleusercontent.com/d/${match[1]}`;
-    }
-  }
-  return url;
 }
 
 function renderMediaGallery() {
@@ -2013,9 +2005,9 @@ function initTikTokWizardEvents() {
         showToast('⚠️ Ingresa primero tu TikTok Client Key en el campo de arriba.');
         return;
       }
-      const redirectUri = window.location.origin.includes('localhost')
-        ? 'https://sheep-100-b8a90.web.app/'
-        : window.location.origin + '/';
+      const currentUrl = new URL(window.location.href);
+      const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
+      const redirectUri = currentUrl.origin + cleanPath;
       const state = 'sheep100_' + Date.now();
       const url = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
         clientKey
@@ -2023,8 +2015,67 @@ function initTikTokWizardEvents() {
         redirectUri
       )}&state=${state}`;
       window.open(url, '_blank');
-      showToast('🚀 Abriendo ventana de autorización de TikTok en nueva pestaña...');
+      showToast(`🚀 Abriendo autorización de TikTok con Redirect URI: ${redirectUri}`);
     });
+  }
+}
+
+async function checkTikTokOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const error = params.get('error') || params.get('error_description');
+  if (error) {
+    showToast(`⚠️ TikTok OAuth: ${error}`);
+    return;
+  }
+  if (!code) return;
+
+  const tt = appState.tiktokConfig || {};
+  const clientKey = (tt.clientKey || document.getElementById('cfgTikTokClientKey')?.value || '').trim();
+  const clientSecret = (tt.clientSecret || document.getElementById('cfgTikTokClientSecret')?.value || '').trim();
+
+  if (!clientKey || !clientSecret) {
+    showToast('⚠️ Código de TikTok recibido. Guarda tu Client Key y Client Secret en "Paso a Paso TikTok" para completar la vinculación.');
+    return;
+  }
+
+  showToast('⏳ Vinculando cuenta de TikTok y canjeando Access Token...');
+  try {
+    const currentUrl = new URL(window.location.href);
+    const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
+    const redirectUri = currentUrl.origin + cleanPath;
+
+    const bodyParams = new URLSearchParams();
+    bodyParams.append('client_key', clientKey);
+    bodyParams.append('client_secret', clientSecret);
+    bodyParams.append('code', code);
+    bodyParams.append('grant_type', 'authorization_code');
+    bodyParams.append('redirect_uri', redirectUri);
+
+    const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: bodyParams.toString()
+    });
+    const data = await res.json();
+    if (res.ok && data.data?.access_token) {
+      appState.tiktokConfig = {
+        ...appState.tiktokConfig,
+        accessToken: data.data.access_token,
+        openId: data.data.open_id || '',
+        connected: true
+      };
+      await saveStateEverywhere(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      renderAll();
+      showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
+    } else {
+      const errDetail = data.error?.message || data.message || 'Error canjeando token';
+      showToast(`⚠️ TikTok API: ${errDetail}. Puedes copiar y pegar el Access Token directamente en el campo.`);
+    }
+  } catch (err) {
+    console.warn('OAuth token exchange note:', err);
+    showToast('ℹ️ Si el navegador bloquea la llamada por CORS, puedes pegar tu Access Token directo en "Paso a Paso TikTok".');
   }
 }
 
