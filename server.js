@@ -103,10 +103,32 @@ app.post('/api/tiktok/publish-video', async (req, res) => {
   }
   try {
     const directUrl = await resolveDirectMediaUrl(mediaUrl);
+
+    // 1. Query creator info to determine allowed privacy levels (Sandbox requires SELF_ONLY)
+    let privacyLevel = 'SELF_ONLY';
+    try {
+      const creatorRes = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8'
+        }
+      });
+      const creatorData = await creatorRes.json();
+      const options = creatorData.data?.privacy_level_options;
+      if (Array.isArray(options) && options.length > 0) {
+        if (options.includes('PUBLIC_TO_EVERYONE')) {
+          privacyLevel = 'PUBLIC_TO_EVERYONE';
+        } else {
+          privacyLevel = options[0];
+        }
+      }
+    } catch (_) {}
+
     const publishPayload = {
       post_info: {
         title: title || 'Publicación SHEEP 100',
-        privacy_level: 'PUBLIC_TO_EVERYONE',
+        privacy_level: privacyLevel,
         disable_duet: false,
         disable_comment: false,
         disable_stitch: false
@@ -116,6 +138,7 @@ app.post('/api/tiktok/publish-video', async (req, res) => {
         video_url: directUrl
       }
     };
+
     const ttRes = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
       method: 'POST',
       headers: {

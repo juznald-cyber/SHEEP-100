@@ -1164,10 +1164,11 @@ async function executeTikTokPublish(post) {
   // 2. Client-side fetch with CORS proxy fallback
   try {
     let res;
+    // In Sandbox mode, TikTok requires SELF_ONLY (or matches creator_info)
     const publishPayload = JSON.stringify({
       post_info: {
         title: postTitle,
-        privacy_level: 'PUBLIC_TO_EVERYONE',
+        privacy_level: 'SELF_ONLY',
         disable_duet: false,
         disable_comment: false,
         disable_stitch: false
@@ -1210,6 +1211,9 @@ async function executeTikTokPublish(post) {
       throw new Error(`Respuesta de TikTok API: ${JSON.stringify(data)}`);
     }
   } catch (err) {
+    if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
+      throw new Error('TikTok bloquea envíos desde la web estática por seguridad (CORS). Ejecuta INICIAR_APP.bat en tu PC y entra a http://localhost:3000 para auto-publicar en 1 clic.');
+    }
     throw new Error(err.message || 'Error conectando con TikTok Content Posting API');
   }
 }
