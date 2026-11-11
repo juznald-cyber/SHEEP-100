@@ -1130,26 +1130,41 @@ async function executeTikTokPublish(post) {
   }
 
   try {
-    const res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${ttCfg.accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8'
+    let res;
+    const publishPayload = JSON.stringify({
+      post_info: {
+        title: post.caption || post.title || 'Publicación SHEEP 100',
+        privacy_level: 'PUBLIC_TO_EVERYONE',
+        disable_duet: false,
+        disable_comment: false,
+        disable_stitch: false
       },
-      body: JSON.stringify({
-        post_info: {
-          title: post.caption || post.title || 'Publicación SHEEP 100',
-          privacy_level: 'PUBLIC_TO_EVERYONE',
-          disable_duet: false,
-          disable_comment: false,
-          disable_stitch: false
-        },
-        source_info: {
-          source: 'PULL_FROM_URL',
-          video_url: mediaUrl
-        }
-      })
+      source_info: {
+        source: 'PULL_FROM_URL',
+        video_url: mediaUrl
+      }
     });
+
+    try {
+      res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ttCfg.accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8'
+        },
+        body: publishPayload
+      });
+    } catch (_) {
+      res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://open.tiktokapis.com/v2/post/publish/video/init/'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ttCfg.accessToken}`,
+          'Content-Type': 'application/json; charset=UTF-8'
+        },
+        body: publishPayload
+      });
+    }
+
     const data = await res.json();
     if (res.ok && data.data?.publish_id) {
       return {
@@ -2052,11 +2067,20 @@ async function checkTikTokOAuthCallback() {
     bodyParams.append('grant_type', 'authorization_code');
     bodyParams.append('redirect_uri', redirectUri);
 
-    const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: bodyParams.toString()
-    });
+    let res;
+    try {
+      res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: bodyParams.toString()
+      });
+    } catch (_) {
+      res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent('https://open.tiktokapis.com/v2/oauth/token/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: bodyParams.toString()
+      });
+    }
     const data = await res.json();
     if (res.ok && data.data?.access_token) {
       appState.tiktokConfig = {
