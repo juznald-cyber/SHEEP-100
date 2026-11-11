@@ -1367,13 +1367,16 @@ function initMediaUploadEvents() {
   const formUrl = document.getElementById('formAddUrl');
   formUrl.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const url = document.getElementById('inputMediaUrl').value.trim();
-    const title = document.getElementById('inputMediaTitle').value.trim();
+    let url = document.getElementById('inputMediaUrl').value.trim();
+    const title = document.getElementById('inputMediaTitle').value.trim() || 'Recurso Multimedia';
     const type = document.getElementById('inputMediaType').value;
     const tags = (document.getElementById('inputMediaTags').value || 'url-publica')
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
+
+    // Convert Drive / OneDrive URL
+    url = await autoConvertMediaUrl(url);
 
     const newMedia = {
       id: `media-${Date.now()}`,
@@ -1396,6 +1399,17 @@ function initMediaUploadEvents() {
   document.getElementById('mediaSearchInput').addEventListener('input', renderMediaGallery);
 }
 
+function getMediaThumbnailUrl(m) {
+  const url = (m.publicUrl || m.url || '').trim();
+  if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
+    const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return url;
+}
+
 function renderMediaGallery() {
   const grid = document.getElementById('mediaGalleryGrid');
   const countLabel = document.getElementById('mediaCountLabel');
@@ -1411,14 +1425,16 @@ function renderMediaGallery() {
   countLabel.textContent = items.length;
 
   grid.innerHTML = items
-    .map(
-      (m) => `
+    .map((m) => {
+      const thumb = getMediaThumbnailUrl(m);
+      const isVideo = m.type === 'video' || m.format === 'MP4';
+      return `
       <div class="media-card">
-        <img src="${m.url}" class="media-card-thumb" alt="${escapeHtml(m.title)}" />
+        <img src="${escapeHtml(thumb)}" class="media-card-thumb" alt="${escapeHtml(m.title)}" onerror="this.onerror=null; this.src='${escapeHtml(m.url)}';" />
         <div class="media-card-body">
           <strong>${escapeHtml(m.title)}</strong>
           <div style="font-size:0.72rem;color:var(--text-muted);">
-            Formato: <b>${m.format}</b> • ${m.publicUrl ? '🌐 URL Pública Lista' : '☁️ Sincronizado'}
+            Formato: <b>${m.format}</b> • ${isVideo ? '🎬 Video' : '📸 Imagen'}
           </div>
           <div style="display:flex;gap:6px;margin-top:6px;">
             <button class="btn-primary btn-sm full-width" onclick="openComposerModal({ mediaId: '${m.id}' })">
@@ -1428,8 +1444,8 @@ function renderMediaGallery() {
           </div>
         </div>
       </div>
-    `
-    )
+    `;
+    })
     .join('');
 }
 
@@ -2231,13 +2247,15 @@ function openComposerModal(opts = {}) {
         document.getElementById('postMediaSelect').value = m.id;
         document.getElementById('postPublicMediaUrl').value = m.publicUrl || m.url;
         document.getElementById('postTitle').value = m.title.replace(/\.[^.]+$/, '');
-        updateComposerPreview(m.url);
+        document.getElementById('postMediaType').value = (m.type === 'video' || m.format === 'MP4') ? 'REELS' : 'IMAGE';
+        updateComposerPreview(m.publicUrl || m.url);
       }
     } else if (appState.mediaLibrary[0]) {
       const first = appState.mediaLibrary[0];
       document.getElementById('postMediaSelect').value = first.id;
       document.getElementById('postPublicMediaUrl').value = first.publicUrl || first.url;
-      updateComposerPreview(first.url);
+      document.getElementById('postMediaType').value = (first.type === 'video' || first.format === 'MP4') ? 'REELS' : 'IMAGE';
+      updateComposerPreview(first.publicUrl || first.url);
     }
 
     if (opts.prefillTitle) document.getElementById('postTitle').value = opts.prefillTitle;
