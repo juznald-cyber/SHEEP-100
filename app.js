@@ -435,6 +435,7 @@ function onUserAuthenticated(userObj) {
   if (pill) pill.textContent = `👤 ${userObj.name || userObj.username}`;
   hideLoginScreen();
   renderAll();
+  checkTikTokOAuthCallback();
 }
 
 function initAuthAndUsersEvents() {
@@ -2096,53 +2097,53 @@ function showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'modalTikTokCodeAssistant';
-    modal.className = 'modal active';
-    modal.style.zIndex = '99999';
     document.body.appendChild(modal);
   }
+  modal.className = 'modal-backdrop';
+  modal.style.cssText = 'position:fixed!important;inset:0!important;background:rgba(0,0,0,0.85)!important;z-index:999999!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:16px!important;';
 
-  const psCmd = `$r = Invoke-RestMethod -Uri 'https://open.tiktokapis.com/v2/oauth/token/' -Method Post -Body @{ client_key='${clientKey}'; client_secret='${clientSecret}'; code='${code}'; grant_type='authorization_code'; redirect_uri='${redirectUri}' }; $r.data.access_token`;
+  const cleanKey = clientKey || 'sbawbyxlo8yktgrxxv';
+  const psCmd = `$r = Invoke-RestMethod -Uri 'https://open.tiktokapis.com/v2/oauth/token/' -Method Post -Body @{ client_key='${cleanKey}'; client_secret='${clientSecret}'; code='${code}'; grant_type='authorization_code'; redirect_uri='${redirectUri}' }; $r.data.access_token`;
 
   modal.innerHTML = `
-    <div class="modal-content" style="max-width:560px;background:#131828;border:1px solid #3b82f6;color:#e2e8f0;border-radius:12px;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+    <div class="modal-content" style="max-width:560px;background:#131828;border:2px solid #3b82f6;color:#e2e8f0;border-radius:14px;padding:24px;box-shadow:0 25px 60px rgba(0,0,0,0.9);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <h3 style="margin:0;color:#60a5fa;display:flex;align-items:center;gap:8px;">
-          🎉 Código de TikTok Recibido
+        <h3 style="margin:0;color:#60a5fa;display:flex;align-items:center;gap:8px;font-size:1.15rem;">
+          🎉 ¡TikTok Autorizado con Éxito!
         </h3>
-        <button type="button" class="btn-outline btn-xs" onclick="document.getElementById('modalTikTokCodeAssistant').classList.remove('active'); window.history.replaceState({}, document.title, window.location.pathname);">✕</button>
+        <button type="button" class="btn-outline btn-xs" onclick="document.getElementById('modalTikTokCodeAssistant').remove(); window.history.replaceState({}, document.title, window.location.pathname);">✕</button>
       </div>
 
-      <p style="font-size:0.9rem;line-height:1.4;margin-bottom:12px;">
-        ¡TikTok ha validado la autorización con éxito!
+      <p style="font-size:0.88rem;line-height:1.45;margin-bottom:12px;color:#e2e8f0;">
+        TikTok ya aprobó el acceso a tu cuenta. Solo falta generar el <strong>Access Token</strong> final (bloqueado por políticas CORS de páginas estáticas en TikTok).
       </p>
 
       <div style="background:#0b0f1a;padding:12px;border-radius:8px;border:1px solid #1e293b;margin-bottom:14px;">
         <label style="font-size:0.75rem;color:#94a3b8;font-weight:600;display:block;margin-bottom:4px;">CÓDIGO DE AUTORIZACIÓN (CODE):</label>
         <div style="display:flex;gap:8px;">
-          <input type="text" readonly value="${code}" style="font-family:monospace;font-size:0.85rem;background:#030712;color:#38bdf8;border:1px solid #334155;padding:6px 10px;border-radius:6px;width:100%;" />
+          <input type="text" readonly value="${code}" style="font-family:monospace;font-size:0.82rem;background:#030712;color:#38bdf8;border:1px solid #334155;padding:6px 10px;border-radius:6px;width:100%;" />
           <button type="button" class="btn-primary btn-sm" onclick="navigator.clipboard.writeText('${code}'); showToast('📋 Código copiado');">Copiar</button>
         </div>
       </div>
 
       <p style="font-size:0.85rem;line-height:1.4;color:#cbd5e1;margin-bottom:8px;">
-        Para completar la conexión, canjea el código ejecutando este comando en tu PowerShell (tarda 3 segundos):
+        ⚡ <strong>Paso Rápido (3 segundos):</strong> Copia este comando, pégalo en tu <strong>PowerShell</strong> de Windows y presiona Enter:
       </p>
 
       <div style="background:#0b0f1a;padding:12px;border-radius:8px;border:1px solid #1e293b;margin-bottom:14px;">
-        <textarea id="txtTikTokPsCmd" readonly style="font-family:monospace;font-size:0.78rem;background:#030712;color:#a7f3d0;border:1px solid #334155;padding:8px;border-radius:6px;width:100%;height:68px;resize:none;">${psCmd}</textarea>
+        <textarea id="txtTikTokPsCmd" readonly style="font-family:monospace;font-size:0.75rem;background:#030712;color:#a7f3d0;border:1px solid #334155;padding:8px;border-radius:6px;width:100%;height:68px;resize:none;">${psCmd}</textarea>
         <button type="button" class="btn-outline btn-sm full-width" style="margin-top:6px;" onclick="navigator.clipboard.writeText(document.getElementById('txtTikTokPsCmd').value); showToast('📋 Comando PowerShell copiado al portapapeles');">
           📋 Copiar Comando PowerShell
         </button>
       </div>
 
-      <label style="font-size:0.8rem;color:#e2e8f0;font-weight:600;display:block;margin-bottom:6px;">Pega aquí tu Access Token generado:</label>
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <input type="text" id="assistantTokenInput" placeholder="act.example_access_token..." style="background:#030712;color:#fff;border:1px solid #334155;padding:8px 12px;border-radius:6px;width:100%;" />
+      <label style="font-size:0.82rem;color:#e2e8f0;font-weight:600;display:block;margin-bottom:6px;">Pega aquí el Access Token que devolvió PowerShell:</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="assistantTokenInput" placeholder="act.example_access_token..." style="background:#030712;color:#fff;border:1px solid #334155;padding:8px 12px;border-radius:6px;width:100%;font-family:monospace;font-size:0.85rem;" />
         <button type="button" class="btn-primary btn-sm" onclick="window.saveTokenFromAssistant()">💾 Guardar</button>
       </div>
     </div>
   `;
-  modal.classList.add('active');
 }
 
 window.saveTokenFromAssistant = async function() {
@@ -2158,7 +2159,8 @@ window.saveTokenFromAssistant = async function() {
   };
   await saveStateEverywhere(true);
   const modal = document.getElementById('modalTikTokCodeAssistant');
-  if (modal) modal.classList.remove('active');
+  if (modal) modal.remove();
+  sessionStorage.removeItem('pending_tiktok_code');
   window.history.replaceState({}, document.title, window.location.pathname);
   renderAll();
   showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
@@ -2166,16 +2168,17 @@ window.saveTokenFromAssistant = async function() {
 
 async function checkTikTokOAuthCallback() {
   const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
+  const code = params.get('code') || sessionStorage.getItem('pending_tiktok_code');
   const error = params.get('error') || params.get('error_description');
   if (error) {
     showToast(`⚠️ TikTok OAuth: ${error}`);
     return;
   }
   if (!code) return;
+  sessionStorage.setItem('pending_tiktok_code', code);
 
   const tt = appState.tiktokConfig || {};
-  const clientKey = (tt.clientKey || document.getElementById('cfgTikTokClientKey')?.value || '').trim();
+  const clientKey = (tt.clientKey || document.getElementById('cfgTikTokClientKey')?.value || '').trim() || 'sbawbyxlo8yktgrxxv';
   const clientSecret = (tt.clientSecret || document.getElementById('cfgTikTokClientSecret')?.value || '').trim();
 
   const currentUrl = new URL(window.location.href);
@@ -2244,6 +2247,7 @@ async function checkTikTokOAuthCallback() {
       connected: true
     };
     await saveStateEverywhere(true);
+    sessionStorage.removeItem('pending_tiktok_code');
     window.history.replaceState({}, document.title, window.location.pathname);
     renderAll();
     showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
