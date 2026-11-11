@@ -1990,6 +1990,18 @@ function initComposerEvents() {
   document.getElementById('btnCloseComposer').addEventListener('click', closeComposerModal);
   document.getElementById('btnCancelComposer').addEventListener('click', closeComposerModal);
 
+  const mediaTypeSelect = document.getElementById('postMediaType');
+  if (mediaTypeSelect) {
+    mediaTypeSelect.addEventListener('change', async () => {
+      const urlEl = document.getElementById('postPublicMediaUrl');
+      if (urlEl && urlEl.value) {
+        const converted = await autoConvertMediaUrl(urlEl.value);
+        urlEl.value = converted;
+        updateComposerPreview(converted);
+      }
+    });
+  }
+
   const mediaSelect = document.getElementById('postMediaSelect');
   mediaSelect.addEventListener('change', () => {
     const media = appState.mediaLibrary.find((m) => m.id === mediaSelect.value);
@@ -2036,10 +2048,16 @@ async function autoConvertMediaUrl(raw) {
   }
 
   // 4. Google Drive viewer link: drive.google.com/file/d/ID/view
-  if (url.includes('drive.google.com/file/d/')) {
-    const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
+    const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (m && m[1]) {
-      return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+      const fileId = m[1];
+      const type = document.getElementById('postMediaType')?.value;
+      if (type === 'REELS' || type === 'VIDEO') {
+        return `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+      } else {
+        return `https://lh3.googleusercontent.com/d/${fileId}`;
+      }
     }
   }
 
@@ -2155,14 +2173,23 @@ function populateComposerMediaDropdown() {
 
 function updateComposerPreview(url) {
   const box = document.getElementById('composerMediaPreview');
+  const type = document.getElementById('postMediaType')?.value;
   if (!url) {
     box.innerHTML = `<span>Selecciona un medio o pega una URL</span>`;
     return;
   }
-  if (/\.mp4(\?|$)/i.test(url)) {
-    box.innerHTML = `<video src="${escapeHtml(url)}" controls muted></video>`;
+  const isVideo = type === 'REELS' || type === 'VIDEO' || /\.mp4(\?|$)/i.test(url) || url.includes('export=download');
+  if (isVideo) {
+    box.innerHTML = `<video src="${escapeHtml(url)}" controls muted style="max-width:100%;max-height:200px;border-radius:8px;"></video>`;
   } else {
-    box.innerHTML = `<img src="${escapeHtml(url)}" alt="Preview" />`;
+    let cleanImgUrl = url;
+    if (cleanImgUrl.includes('drive.google.com') || cleanImgUrl.includes('drive.usercontent.google.com')) {
+      const m = cleanImgUrl.match(/id=([a-zA-Z0-9_-]+)/) || cleanImgUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m && m[1]) {
+        cleanImgUrl = `https://lh3.googleusercontent.com/d/${m[1]}`;
+      }
+    }
+    box.innerHTML = `<img src="${escapeHtml(cleanImgUrl)}" alt="Preview" style="max-width:100%;max-height:200px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null; this.src='${escapeHtml(url)}';" />`;
   }
 }
 
