@@ -25,6 +25,50 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.static(PUBLIC_DIR));
 
+// Resolves cloud URLs (OneDrive, Google Drive, Dropbox) to direct download links
+async function resolveDirectMediaUrl(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  let target = raw.trim();
+
+  if (target.includes('1drv.ms/')) {
+    try {
+      const headRes = await fetch(target, { method: 'HEAD', redirect: 'follow' });
+      target = headRes.url || target;
+    } catch (_) {}
+  }
+
+  if (target.includes('onedrive.live.com')) {
+    if (target.includes('/view.aspx')) {
+      target = target.replace('/view.aspx', '/download');
+    } else if (!target.includes('download=1')) {
+      target += (target.includes('?') ? '&' : '?') + 'download=1';
+    }
+  } else if (target.includes('sharepoint.com') && !target.includes('download=1')) {
+    target += (target.includes('?') ? '&' : '?') + 'download=1';
+  } else if (target.includes('drive.google.com/file/d/')) {
+    const m = target.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m && m[1]) {
+      target = `https://drive.google.com/uc?export=download&id=${m[1]}`;
+    }
+  } else if (target.includes('dropbox.com')) {
+    target = target.replace(/[?&]dl=0/i, '').replace(/[?&]dl=1/i, '');
+    target += (target.includes('?') ? '&' : '?') + 'raw=1';
+  }
+
+  return target;
+}
+
+app.get('/api/resolve-media-url', async (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).json({ error: 'Missing url' });
+  try {
+    const directUrl = await resolveDirectMediaUrl(target);
+    res.json({ directUrl });
+  } catch (err) {
+    res.json({ directUrl: target });
+  }
+});
+
 // Configure Multer for media uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),

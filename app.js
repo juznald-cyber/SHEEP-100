@@ -894,7 +894,8 @@ async function executeMetaPublishFlow(post) {
   const cfg = appState.metaConfig || {};
   const accessToken = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
-  const mediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const mediaUrl = await autoConvertMediaUrl(rawUrl);
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   if (!accessToken || !igUserId) {
@@ -974,7 +975,8 @@ async function executeFacebookPagePublish(post) {
   const cfg = appState.metaConfig || {};
   const accessToken = (cfg.accessToken || '').trim();
   const fbPageId = (cfg.fbPageId || '').trim();
-  const mediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const mediaUrl = await autoConvertMediaUrl(rawUrl);
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   if (!accessToken || !fbPageId) {
@@ -1015,7 +1017,8 @@ async function executeFacebookPagePublish(post) {
 // Executes official TikTok Content Posting API or assisted 1-click flow
 async function executeTikTokPublish(post) {
   const ttCfg = appState.tiktokConfig || {};
-  const mediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const mediaUrl = await autoConvertMediaUrl(rawUrl);
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
   const isVideo = post.mediaType === 'REELS' || post.mediaType === 'VIDEO' || /\.mp4/i.test(mediaUrl);
 
@@ -1996,9 +1999,85 @@ function initComposerEvents() {
     }
   });
 
-  document.getElementById('postPublicMediaUrl').addEventListener('input', (e) => {
-    updateComposerPreview(e.target.value);
-  });
+// Helper to automatically convert cloud storage viewer links (OneDrive, Google Drive, Dropbox) into direct download links
+async function autoConvertMediaUrl(raw) {
+  if (!raw || typeof raw !== 'string') return raw;
+  let url = raw.trim();
+
+  // 1. OneDrive short link (1drv.ms)
+  if (url.includes('1drv.ms/')) {
+    try {
+      const res = await fetch(`/api/resolve-media-url?url=${encodeURIComponent(url)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.directUrl) return data.directUrl;
+      }
+    } catch (_) {}
+    if (!url.includes('download=1')) {
+      url += (url.includes('?') ? '&' : '?') + 'download=1';
+    }
+    return url;
+  }
+
+  // 2. OneDrive Web link (onedrive.live.com)
+  if (url.includes('onedrive.live.com')) {
+    if (url.includes('/view.aspx')) {
+      url = url.replace('/view.aspx', '/download');
+    } else if (!url.includes('download=1')) {
+      url += (url.includes('?') ? '&' : '?') + 'download=1';
+    }
+    return url;
+  }
+
+  // 3. SharePoint / OneDrive Business
+  if (url.includes('sharepoint.com') && !url.includes('download=1')) {
+    url += (url.includes('?') ? '&' : '?') + 'download=1';
+    return url;
+  }
+
+  // 4. Google Drive viewer link: drive.google.com/file/d/ID/view
+  if (url.includes('drive.google.com/file/d/')) {
+    const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m && m[1]) {
+      return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+    }
+  }
+
+  // 5. Dropbox link: dropbox.com/...dl=0 -> raw=1
+  if (url.includes('dropbox.com')) {
+    url = url.replace(/[?&]dl=0/i, '').replace(/[?&]dl=1/i, '');
+    url += (url.includes('?') ? '&' : '?') + 'raw=1';
+    return url;
+  }
+
+  return url;
+}
+window.autoConvertMediaUrl = autoConvertMediaUrl;
+
+  const urlInput = document.getElementById('postPublicMediaUrl');
+  if (urlInput) {
+    urlInput.addEventListener('input', (e) => {
+      updateComposerPreview(e.target.value);
+    });
+    urlInput.addEventListener('paste', () => {
+      setTimeout(async () => {
+        const converted = await autoConvertMediaUrl(urlInput.value);
+        if (converted && converted !== urlInput.value) {
+          urlInput.value = converted;
+          updateComposerPreview(converted);
+          showToast('⚡ Enlace de nube convertido automáticamente a descarga directa para Meta/TikTok');
+        }
+      }, 50);
+    });
+    urlInput.addEventListener('change', async () => {
+      const converted = await autoConvertMediaUrl(urlInput.value);
+      if (converted && converted !== urlInput.value) {
+        urlInput.value = converted;
+        updateComposerPreview(converted);
+        showToast('⚡ Enlace de nube convertido automáticamente a descarga directa para Meta/TikTok');
+      }
+    });
+  }
 
   const captionInput = document.getElementById('postCaption');
   captionInput.addEventListener('input', () => {
@@ -2016,7 +2095,8 @@ function initComposerEvents() {
       ? new Date(scheduledLocal).toISOString()
       : new Date().toISOString();
 
-    const mediaUrlVal = document.getElementById('postPublicMediaUrl').value.trim();
+    let mediaUrlVal = document.getElementById('postPublicMediaUrl').value.trim();
+    mediaUrlVal = await autoConvertMediaUrl(mediaUrlVal);
     const existingId = document.getElementById('postId').value;
 
     if (existingId) {
