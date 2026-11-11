@@ -71,7 +71,7 @@ app.get('/api/resolve-media-url', async (req, res) => {
 
 // TikTok OAuth token exchange helper (no CORS restrictions on server)
 app.post('/api/tiktok/exchange-code', async (req, res) => {
-  const { client_key, client_secret, code, redirect_uri } = req.body || {};
+  const { client_key, client_secret, code, redirect_uri, code_verifier } = req.body || {};
   if (!client_key || !client_secret || !code) {
     return res.status(400).json({ error: 'Faltan parámetros requeridos (client_key, client_secret, code)' });
   }
@@ -82,6 +82,9 @@ app.post('/api/tiktok/exchange-code', async (req, res) => {
     bodyParams.append('code', code);
     bodyParams.append('grant_type', 'authorization_code');
     bodyParams.append('redirect_uri', redirect_uri);
+    if (code_verifier) {
+      bodyParams.append('code_verifier', code_verifier);
+    }
 
     const ttRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
       method: 'POST',
@@ -89,6 +92,22 @@ app.post('/api/tiktok/exchange-code', async (req, res) => {
       body: bodyParams.toString()
     });
     const data = await ttRes.json();
+
+    // If exchange succeeded, save to db.json immediately
+    if (ttRes.ok && data.data?.access_token) {
+      try {
+        const db = readDb();
+        db.tiktokConfig = db.tiktokConfig || {};
+        db.tiktokConfig.clientKey = client_key;
+        db.tiktokConfig.clientSecret = client_secret;
+        db.tiktokConfig.accessToken = data.data.access_token;
+        db.tiktokConfig.connected = true;
+        writeDb(db);
+      } catch (saveErr) {
+        console.warn('Error guardando token en db.json:', saveErr);
+      }
+    }
+
     return res.status(ttRes.status).json(data);
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Error comunicando con TikTok API' });
@@ -523,7 +542,14 @@ app.post('/api/state/sync', (req, res) => {
     const current = readDb();
     const merged = {
       ...current,
-      metaConfig: incoming.metaConfig || current.metaConfig,
+      metaConfig: {
+        ...(current.metaConfig || {}),
+        ...(incoming.metaConfig || {})
+      },
+      tiktokConfig: {
+        ...(current.tiktokConfig || {}),
+        ...(incoming.tiktokConfig || {})
+      },
       mediaLibrary: Array.isArray(incoming.mediaLibrary) ? incoming.mediaLibrary : current.mediaLibrary,
       posts: Array.isArray(incoming.posts) ? incoming.posts : current.posts,
       hashtagGroups: Array.isArray(incoming.hashtagGroups) ? incoming.hashtagGroups : current.hashtagGroups,

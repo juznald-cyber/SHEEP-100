@@ -19,7 +19,7 @@
     }
   },
   "tiktokConfig": {
-    "clientKey": "",
+    "clientKey": "sbawbyxlo8yktgrxxv",
     "clientSecret": "",
     "accessToken": "",
     "openId": "",
@@ -111,7 +111,7 @@
         "instagram",
         "facebook"
       ],
-      "status": "scheduled",
+      "status": "published",
       "scheduledAt": "2026-11-11T21:00:00.000Z",
       "firstComment": "¿Cuál es la red social que más tiempo te consume? ¡Te leemos!",
       "gridOrder": 1,
@@ -120,8 +120,13 @@
         {
           "time": "2026-11-10T16:13:26.637Z",
           "message": "Publicación programada en cola automática."
+        },
+        {
+          "time": "2026-11-11T22:37:52.678Z",
+          "message": "[Auto] 📸 Publicado en Modo Simulación (Configura tu Token en \"Paso a Paso Meta\" para envío real a Instagram). • 📘 Crossposting automático activado vía Instagram a Facebook Page"
         }
-      ]
+      ],
+      "publishedAt": "2026-11-11T22:37:52.678Z"
     },
     {
       "id": "post-2",

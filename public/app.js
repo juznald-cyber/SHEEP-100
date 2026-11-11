@@ -243,7 +243,22 @@ async function initFirebaseCloud() {
     if (res.ok) {
       const serverData = await res.json();
       if (serverData && Array.isArray(serverData.posts)) {
-        appState = { ...appState, ...serverData };
+        appState = {
+          ...appState,
+          ...serverData,
+          metaConfig: {
+            ...appState.metaConfig,
+            ...(Object.fromEntries(
+              Object.entries(serverData.metaConfig || {}).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+            ))
+          },
+          tiktokConfig: {
+            ...appState.tiktokConfig,
+            ...(Object.fromEntries(
+              Object.entries(serverData.tiktokConfig || {}).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+            ))
+          }
+        };
       }
     }
   } catch (_) {
@@ -2038,7 +2053,39 @@ async function saveTikTokConfigDirect(e) {
 }
 window.saveTikTokConfigDirect = saveTikTokConfigDirect;
 
-window.handleTikTokLinkClick = function(e, el) {
+// PKCE helper functions for TikTok Login Kit (TikTok strictly requires HEX SHA-256 for code_challenge)
+function generateTikTokCodeVerifier() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let verifier = '';
+  if (window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint8Array(64);
+    window.crypto.getRandomValues(array);
+    for (let i = 0; i < array.length; i++) {
+      verifier += chars[array[i] % chars.length];
+    }
+  } else {
+    for (let i = 0; i < 64; i++) {
+      verifier += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  }
+  return verifier;
+}
+
+async function generateTikTokCodeChallenge(verifier) {
+  if (window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const hash = await window.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return verifier;
+}
+
+window.handleTikTokLinkClick = async function(e, el) {
+  if (e && e.preventDefault) e.preventDefault();
+
   const keyEl = document.getElementById('cfgTikTokClientKey');
   const secretEl = document.getElementById('cfgTikTokClientSecret');
   const userEl = document.getElementById('cfgTikTokUsername');
@@ -2047,6 +2094,18 @@ window.handleTikTokLinkClick = function(e, el) {
   const clientSecret = (secretEl ? secretEl.value : (appState.tiktokConfig?.clientSecret || '')).trim();
   const username = (userEl ? userEl.value : (appState.tiktokConfig?.username || '@cocuyo.grafic')).trim();
 
+  // Generate PKCE code_verifier and code_challenge
+  const codeVerifier = generateTikTokCodeVerifier();
+  sessionStorage.setItem('tiktok_code_verifier', codeVerifier);
+  localStorage.setItem('tiktok_code_verifier', codeVerifier);
+
+  let codeChallenge = '';
+  try {
+    codeChallenge = await generateTikTokCodeChallenge(codeVerifier);
+  } catch (_) {
+    codeChallenge = codeVerifier;
+  }
+
   // Pre-save clientKey & secret so they are preserved across redirect
   appState.tiktokConfig = {
     ...appState.tiktokConfig,
@@ -2054,7 +2113,7 @@ window.handleTikTokLinkClick = function(e, el) {
     clientSecret,
     username
   };
-  saveStateEverywhere(true);
+  saveStateEverywhere(false);
 
   // Clean current URL for callback (strip any query parameters or hash)
   const currentUrl = new URL(window.location.href);
@@ -2066,7 +2125,7 @@ window.handleTikTokLinkClick = function(e, el) {
     clientKey
   )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
     redirectUri
-  )}&state=${state}`;
+  )}&state=${state}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`;
 
   if (el) el.href = url;
   const linkTab = document.getElementById('linkTikTokNewTab');
@@ -2075,7 +2134,7 @@ window.handleTikTokLinkClick = function(e, el) {
   showToast('🚀 Redirigiendo a TikTok para autorizar...');
   // Immediate navigation while user gesture is active
   window.location.assign(url);
-  return true;
+  return false;
 };
 window.startTikTokOAuth = window.handleTikTokLinkClick;
 
@@ -2096,7 +2155,7 @@ function initTikTokWizardEvents() {
   }
 }
 
-function showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri) {
+function showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri, codeVerifier = '') {
   let modal = document.getElementById('modalTikTokCodeAssistant');
   if (!modal) {
     modal = document.createElement('div');
@@ -2107,7 +2166,8 @@ function showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri) {
   modal.style.cssText = 'position:fixed!important;inset:0!important;background:rgba(0,0,0,0.85)!important;z-index:999999!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:16px!important;';
 
   const cleanKey = clientKey || 'sbawbyxlo8yktgrxxv';
-  const psCmd = `$r = Invoke-RestMethod -Uri 'https://open.tiktokapis.com/v2/oauth/token/' -Method Post -Body @{ client_key='${cleanKey}'; client_secret='${clientSecret}'; code='${code}'; grant_type='authorization_code'; redirect_uri='${redirectUri}' }; $r.data.access_token`;
+  const verifierParam = codeVerifier ? `; code_verifier='${codeVerifier}'` : '';
+  const psCmd = `$r = Invoke-RestMethod -Uri 'https://open.tiktokapis.com/v2/oauth/token/' -Method Post -Body @{ client_key='${cleanKey}'; client_secret='${clientSecret}'; code='${code}'; grant_type='authorization_code'; redirect_uri='${redirectUri}'${verifierParam} }; $r.data.access_token`;
 
   modal.innerHTML = `
     <div class="modal-content" style="max-width:560px;background:#131828;border:2px solid #3b82f6;color:#e2e8f0;border-radius:14px;padding:24px;box-shadow:0 25px 60px rgba(0,0,0,0.9);">
@@ -2184,6 +2244,7 @@ async function checkTikTokOAuthCallback() {
   const tt = appState.tiktokConfig || {};
   const clientKey = (tt.clientKey || document.getElementById('cfgTikTokClientKey')?.value || '').trim() || 'sbawbyxlo8yktgrxxv';
   const clientSecret = (tt.clientSecret || document.getElementById('cfgTikTokClientSecret')?.value || '').trim();
+  const codeVerifier = sessionStorage.getItem('tiktok_code_verifier') || localStorage.getItem('tiktok_code_verifier') || '';
 
   const currentUrl = new URL(window.location.href);
   const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
@@ -2201,7 +2262,8 @@ async function checkTikTokOAuthCallback() {
           client_key: clientKey,
           client_secret: clientSecret,
           code,
-          redirect_uri: redirectUri
+          redirect_uri: redirectUri,
+          code_verifier: codeVerifier
         })
       });
       const data = await srvRes.json();
@@ -2222,6 +2284,7 @@ async function checkTikTokOAuthCallback() {
       bodyParams.append('code', code);
       bodyParams.append('grant_type', 'authorization_code');
       bodyParams.append('redirect_uri', redirectUri);
+      if (codeVerifier) bodyParams.append('code_verifier', codeVerifier);
 
       let res;
       try {
@@ -2257,7 +2320,7 @@ async function checkTikTokOAuthCallback() {
     showToast('🎉 ¡TikTok conectado exitosamente con Access Token!');
   } else {
     // Show the interactive helper modal so the user is never stuck
-    showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri);
+    showTikTokCodeAssistant(code, clientKey, clientSecret, redirectUri, codeVerifier);
   }
 }
 
@@ -2292,26 +2355,36 @@ function renderTikTokWizardState() {
     if (el && document.activeElement !== el) el.value = val || '';
   };
 
-  setValIfIdle('cfgTikTokClientKey', tt.clientKey);
+  setValIfIdle('cfgTikTokClientKey', tt.clientKey || 'sbawbyxlo8yktgrxxv');
   setValIfIdle('cfgTikTokClientSecret', tt.clientSecret);
   setValIfIdle('cfgTikTokAccessToken', tt.accessToken);
   setValIfIdle('cfgTikTokUsername', tt.username || '@cocuyo.grafic');
 
-  // Pre-calculate direct OAuth links
+  // Pre-calculate direct OAuth links with PKCE
   const clientKey = tt.clientKey || 'sbawbyxlo8yktgrxxv';
   const currentUrl = new URL(window.location.href);
   const cleanPath = currentUrl.pathname.endsWith('/') ? currentUrl.pathname : (currentUrl.pathname + '/');
   const redirectUri = currentUrl.origin + cleanPath;
-  const directOAuthUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
-    clientKey
-  )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
-    redirectUri
-  )}&state=sheep100`;
 
-  const btnOAuth = document.getElementById('btnTikTokOAuth');
-  if (btnOAuth) btnOAuth.href = directOAuthUrl;
-  const linkTab = document.getElementById('linkTikTokNewTab');
-  if (linkTab) linkTab.href = directOAuthUrl;
+  let existingVerifier = sessionStorage.getItem('tiktok_code_verifier') || localStorage.getItem('tiktok_code_verifier');
+  if (!existingVerifier) {
+    existingVerifier = generateTikTokCodeVerifier();
+    sessionStorage.setItem('tiktok_code_verifier', existingVerifier);
+    localStorage.setItem('tiktok_code_verifier', existingVerifier);
+  }
+
+  generateTikTokCodeChallenge(existingVerifier).then((challenge) => {
+    const directOAuthUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
+      clientKey
+    )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&state=sheep100&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=S256`;
+
+    const btnOAuth = document.getElementById('btnTikTokOAuth');
+    if (btnOAuth) btnOAuth.href = directOAuthUrl;
+    const linkTab = document.getElementById('linkTikTokNewTab');
+    if (linkTab) linkTab.href = directOAuthUrl;
+  }).catch(() => {});
 
   const badge = document.getElementById('tiktokProgressBadge');
   if (badge) badge.textContent = isConn ? 'Conectado (Listo)' : (hasCreds ? 'Falta Autorizar' : 'Modo Sandbox');
