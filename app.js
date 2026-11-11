@@ -664,14 +664,22 @@ window.switchTab = switchTab;
 // CALENDAR & DRAG-AND-DROP
 // ==========================================
 function getMediaThumbnailUrl(item) {
-  if (!item) return './icon.svg';
+  if (!item) return '';
+  let target = item;
+  if (typeof item === 'object') {
+    if (item.mediaId && (!item.mediaUrl && !item.publicMediaUrl)) {
+      const found = appState.mediaLibrary.find((m) => m.id === item.mediaId);
+      if (found) target = found;
+    }
+  }
+
   const rawUrl = (
-    typeof item === 'string'
-      ? item
-      : (item.publicMediaUrl || item.mediaUrl || item.publicUrl || item.url || '') + ''
+    typeof target === 'string'
+      ? target
+      : (target.publicMediaUrl || target.mediaUrl || target.publicUrl || target.url || '') + ''
   ).trim();
 
-  if (!rawUrl) return './icon.svg';
+  if (!rawUrl) return '';
 
   // 1. Google Drive (file / folder / view / download)
   if (rawUrl.includes('drive.google.com') || rawUrl.includes('drive.usercontent.google.com')) {
@@ -683,7 +691,12 @@ function getMediaThumbnailUrl(item) {
 
   // 2. Video fallback placeholder if it's an MP4 URL and not an image
   if (/\.mp4(\?|$)/i.test(rawUrl)) {
-    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231e1b4b"/><polygon points="38,30 72,50 38,70" fill="%23818cf8"/><text x="50" y="88" fill="%23cbd5e1" font-size="11" font-family="sans-serif" text-anchor="middle">VIDEO</text></svg>`;
+    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="68" viewBox="0 0 100 68"><rect width="100" height="68" fill="%231e1b4b"/><polygon points="40,20 65,34 40,48" fill="%23818cf8"/><text x="50" y="59" fill="%23cbd5e1" font-size="9" font-family="sans-serif" text-anchor="middle">VIDEO MP4</text></svg>`;
+  }
+
+  // 3. Ignore OneDrive personal links that require auth
+  if (rawUrl.includes('1drv.ms') || rawUrl.includes('onedrive.live.com')) {
+    return '';
   }
 
   return rawUrl;
@@ -780,9 +793,10 @@ function renderWeekCalendar() {
               hour: '2-digit',
               minute: '2-digit'
             });
+            const thumb = getMediaThumbnailUrl(p);
             return `
               <div class="cal-post-card status-${p.status}" draggable="true" data-post-id="${p.id}">
-                ${(p.mediaUrl || p.publicMediaUrl) ? `<img src="${escapeHtml(getMediaThumbnailUrl(p))}" class="cal-post-thumb" alt="" onerror="this.onerror=null; this.src='./icon.svg';" />` : ''}
+                ${thumb ? `<img src="${thumb}" class="cal-post-thumb" alt="" onerror="this.remove();" />` : ''}
                 <div class="cal-post-time">
                   <span>⏰ ${t}</span>
                   <span>${p.platforms?.includes('instagram') ? '📸' : ''} ${p.platforms?.includes('tiktok') ? '🎵' : ''}</span>
@@ -880,10 +894,16 @@ function renderPostsQueue() {
         : 'Sin fecha';
       const lastLog = p.logs && p.logs.length ? p.logs[p.logs.length - 1].message : '';
 
+      const thumb = getMediaThumbnailUrl(p);
+      const isVideo = p.mediaType === 'REELS' || p.mediaType === 'VIDEO';
+      const thumbHtml = thumb
+        ? `<img src="${thumb}" class="queue-thumb" alt="" onerror="this.outerHTML='<div class=\\'queue-thumb-placeholder\\'>${isVideo ? '🎬' : '📸'}</div>';" />`
+        : `<div class="queue-thumb-placeholder">${isVideo ? '🎬' : '📸'}</div>`;
+
       return `
         <div class="queue-row">
           <div class="queue-row-left">
-            <img src="${escapeHtml(getMediaThumbnailUrl(p))}" class="queue-thumb" alt="" onerror="this.onerror=null; this.src='./icon.svg';" />
+            ${thumbHtml}
             <div>
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <strong>${escapeHtml(p.title)}</strong>
@@ -1297,12 +1317,15 @@ function renderInstagramGrid() {
   gridContainer.innerHTML = orderedPosts
     .slice(0, 9)
     .map(
-      (p) => `
-      <div class="ig-cell" draggable="true" data-post-id="${p.id}">
-        <img src="${escapeHtml(getMediaThumbnailUrl(p))}" alt="${escapeHtml(p.title)}" onerror="this.onerror=null; this.src='./icon.svg';" />
-        <span class="ig-cell-badge">${p.status === 'published' ? '✔' : '⏰'}</span>
-      </div>
-    `
+      (p) => {
+        const thumb = getMediaThumbnailUrl(p);
+        return `
+        <div class="ig-cell" draggable="true" data-post-id="${p.id}">
+          ${thumb ? `<img src="${thumb}" alt="${escapeHtml(p.title)}" onerror="this.remove();" />` : '<div style="width:100%;height:100%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:1.5rem;">📸</div>'}
+          <span class="ig-cell-badge">${p.status === 'published' ? '✔' : '⏰'}</span>
+        </div>
+      `;
+      }
     )
     .join('');
 
@@ -2293,7 +2316,24 @@ function updateComposerPreview(url) {
 
   if (isVideo) {
     if (fileIdMatch && fileIdMatch[1]) {
-      cleanUrl = `https://drive.usercontent.google.com/download?id=${fileIdMatch[1]}&export=download`;
+      const driveId = fileIdMatch[1];
+      box.innerHTML = `
+        <div style="position:relative;width:100%;height:220px;border-radius:8px;overflow:hidden;background:#000;">
+          <iframe 
+            src="https://drive.google.com/file/d/${driveId}/preview" 
+            width="100%" 
+            height="100%" 
+            style="border:none;display:block;" 
+            allow="autoplay; encrypted-media" 
+            allowfullscreen>
+          </iframe>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:0.75rem;">
+          <span style="color:#4ade80;">🎬 Reproductor Google Drive activo</span>
+          <a href="https://drive.google.com/file/d/${driveId}/view" target="_blank" style="color:#818cf8;text-decoration:none;">↗ Abrir en Drive</a>
+        </div>
+      `;
+      return;
     }
     box.innerHTML = `
       <video src="${escapeHtml(cleanUrl)}" controls autoplay muted playsinline style="max-width:100%;max-height:220px;border-radius:8px;background:#000;width:100%;">
