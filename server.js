@@ -669,37 +669,77 @@ app.post('/api/meta/verify-token', async (req, res) => {
   }
 
   try {
+    let pageWithIg = null;
+    let igAccount = null;
+    let pageName = '';
+    let pageId = '';
+
+    // 1. Intentar por me/accounts (Páginas clásicas)
     const graphUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(token)}`;
     const response = await fetch(graphUrl);
     const data = await response.json();
 
-    if (!response.ok || data.error) {
-      return res.status(400).json({
-        error: data.error
-          ? `Meta API respondió: ${data.error.message} (Verifica que incluiste los permisos pages_show_list e instagram_basic)`
-          : 'No se pudo validar el token con Meta.'
-      });
+    if (response.ok && data.data && data.data.length > 0) {
+      pageWithIg = data.data.find((p) => p.instagram_business_account);
+      if (pageWithIg) {
+        igAccount = pageWithIg.instagram_business_account;
+        pageName = pageWithIg.name;
+        pageId = pageWithIg.id;
+      }
     }
 
-    const pages = data.data || [];
-    const pageWithIg = pages.find((p) => p.instagram_business_account);
+    // 2. Fallback: Si el token es de Página o NPE, consultar /me directo
+    if (!igAccount) {
+      try {
+        const directUrl = `https://graph.facebook.com/v21.0/me?fields=id,name,instagram_business_account{id,username,name}&access_token=${encodeURIComponent(token)}`;
+        const directRes = await fetch(directUrl);
+        const directData = await directRes.json();
+        if (directRes.ok && directData.instagram_business_account) {
+          igAccount = directData.instagram_business_account;
+          pageName = directData.name || 'Página de Facebook';
+          pageId = directData.id;
+        }
+      } catch (_) {}
+    }
 
-    if (!pageWithIg) {
+    // 3. Fallback: Consultar Portafolios Comerciales (Meta Business Suite / me/businesses)
+    if (!igAccount) {
+      try {
+        const bizUrl = `https://graph.facebook.com/v21.0/me/businesses?fields=id,name,instagram_accounts{id,username},client_pages{id,name,instagram_business_account{id,username}},owned_pages{id,name,instagram_business_account{id,username}}&access_token=${encodeURIComponent(token)}`;
+        const bizRes = await fetch(bizUrl);
+        const bizData = await bizRes.json();
+        if (bizRes.ok && bizData.data) {
+          for (const b of bizData.data) {
+            if (b.instagram_accounts?.data?.length > 0) {
+              igAccount = b.instagram_accounts.data[0];
+              pageName = b.name;
+              pageId = b.id;
+              break;
+            }
+            const p = (b.owned_pages?.data || []).concat(b.client_pages?.data || []).find((x) => x.instagram_business_account);
+            if (p) {
+              igAccount = p.instagram_business_account;
+              pageName = p.name;
+              pageId = p.id;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!igAccount) {
       return res.status(200).json({
         validToken: true,
-        pagesFound: pages.length,
-        pages,
+        pagesFound: 0,
         warning:
-          pages.length === 0
-            ? 'El Token es válido, pero no devolvió ninguna Página de Facebook. Asegúrate de marcar tu Página al autorizar el Token y añadir el permiso pages_show_list.'
-            : 'Se encontraron Páginas de Facebook, pero ninguna tiene una cuenta de Instagram Business o Creador vinculada todavía (Revisa el Paso 4).'
+          'Meta devolvió una lista de páginas vacía para este token. En Graph API Explorer cambia "Token del usuario" a tu Página en el desplegable, o escribe tu Instagram Business User ID manualmente.'
       });
     }
 
-    const igAccount = pageWithIg.instagram_business_account;
     db.metaConfig.accessToken = token;
-    db.metaConfig.fbPageId = pageWithIg.id;
-    db.metaConfig.fbPageName = pageWithIg.name;
+    db.metaConfig.fbPageId = pageId;
+    db.metaConfig.fbPageName = pageName;
     db.metaConfig.igUserId = igAccount.id;
     db.metaConfig.igUsername = igAccount.username || igAccount.name || '';
     db.metaConfig.wizardSteps.step5_accessToken = true;
@@ -708,14 +748,14 @@ app.post('/api/meta/verify-token', async (req, res) => {
       db,
       'success',
       'Cuenta de Instagram Business Conectada',
-      `@${db.metaConfig.igUsername} (ID: ${igAccount.id}) vinculada a la página "${pageWithIg.name}"`
+      `@${db.metaConfig.igUsername} (ID: ${igAccount.id}) vinculada a la página "${pageName}"`
     );
     writeDb(db);
 
     res.json({
       validToken: true,
       connected: true,
-      fbPage: { id: pageWithIg.id, name: pageWithIg.name },
+      fbPage: { id: pageId, name: pageName },
       igAccount,
       metaConfig: db.metaConfig
     });

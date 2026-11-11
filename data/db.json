@@ -18,6 +18,14 @@
       "step5_accessToken": false
     }
   },
+  "tiktokConfig": {
+    "clientKey": "",
+    "clientSecret": "",
+    "accessToken": "",
+    "openId": "",
+    "username": "@cocuyo.grafic",
+    "connected": false
+  },
   "hashtagGroups": [
     {
       "id": "hg-1",

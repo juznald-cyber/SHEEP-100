@@ -130,6 +130,13 @@
             <div class="nav-desc" id="wizardProgressBadge">Guía Modo Desarrollo</div>
           </div>
         </button>
+        <button class="nav-item nav-item-highlight" data-tab="tiktok-wizard">
+          <span class="nav-icon">🎵</span>
+          <div>
+            <div class="nav-label">Paso a Paso TikTok</div>
+            <div class="nav-desc" id="tiktokProgressBadge">Modo Sandbox</div>
+          </div>
+        </button>
       </nav>
 
       <!-- Estado de Conexión con Meta -->
@@ -143,6 +150,20 @@
         </p>
         <button class="btn-secondary btn-sm full-width" onclick="switchTab('meta-wizard')">
           Configurar Meta API →
+        </button>
+      </div>
+
+      <!-- Estado de Conexión con TikTok -->
+      <div class="meta-status-card" id="sidebarTikTokCard" style="margin-top:10px;">
+        <div class="meta-status-header">
+          <span class="status-dot" id="tiktokStatusDot"></span>
+          <strong id="tiktokStatusTitle">TikTok: Pendiente</strong>
+        </div>
+        <p id="tiktokStatusDesc" class="meta-status-desc">
+          Conecta @cocuyo.grafic en Modo Sandbox.
+        </p>
+        <button class="btn-secondary btn-sm full-width" onclick="switchTab('tiktok-wizard')">
+          Configurar TikTok API →
         </button>
       </div>
     </aside>
@@ -647,6 +668,171 @@ Body: {
           </div>
         </section>
 
+        <!-- ==========================================
+             TAB 6: PASO A PASO TIKTOK (MODO SANDBOX)
+             ========================================== -->
+        <section class="tab-panel" id="tab-tiktok-wizard">
+          <div class="wizard-layout">
+            <div class="meta-hero-banner" style="background: linear-gradient(135deg, rgba(0, 242, 234, 0.15), rgba(255, 0, 79, 0.18)); border-color: rgba(0, 242, 234, 0.4);">
+              <div>
+                <span class="hero-pill" style="background: rgba(0, 242, 234, 0.2); color: #00f2ea;">🎵 TIKTOK CONTENT POSTING API (MODO SANDBOX)</span>
+                <h3>Conecta tu cuenta de TikTok en Modo Pruebas</h3>
+                <p>
+                  Automatiza publicaciones en tu cuenta de TikTok (<strong>@cocuyo.grafic</strong>) utilizando tu App en modo Sandbox.
+                  Admite videos en formato MP4 verticales (9:16) con auto-publicación programada.
+                </p>
+              </div>
+              <div class="wizard-progress-circle" style="border-color: #00f2ea;">
+                <strong id="tiktokPercentText" style="color: #00f2ea;">0%</strong>
+                <span>Completado</span>
+              </div>
+            </div>
+
+            <div class="wizard-grid">
+              <!-- Columna Izquierda: Pasos de TikTok -->
+              <div class="wizard-steps-col">
+                <h3>✅ Lista de Verificación TikTok (4 pasos rápidos)</h3>
+
+                <!-- PASO 1 -->
+                <div class="step-card" id="card-tiktok-step1">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" id="chkTikTokStep1" class="wizard-checkbox" checked />
+                      <span class="step-num">Paso 1</span>
+                      <strong>Crear la App en TikTok for Developers</strong>
+                    </label>
+                    <a href="https://developers.tiktok.com/" target="_blank" rel="noopener" class="btn-link">
+                      Abrir TikTok Developers ↗
+                    </a>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Ya creaste tu App <strong>SHEEP 100</strong> en TikTok for Developers.</li>
+                    <li>Tu cuenta <strong>@cocuyo.grafic</strong> ya está vinculada en la sección Sandbox.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Tu app figura con el badge "Sandbox" activo.
+                  </div>
+                </div>
+
+                <!-- PASO 2 -->
+                <div class="step-card" id="card-tiktok-step2">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" id="chkTikTokStep2" class="wizard-checkbox" checked />
+                      <span class="step-num">Paso 2</span>
+                      <strong>Configurar Login Kit y Content Posting API</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>En <em>Login Kit → Web</em> colocaste la Redirect URI: <code>https://sheep-100-b8a90.web.app/</code>.</li>
+                    <li>En <em>Content Posting API</em> activaste <strong>Direct Post</strong> en verde.</li>
+                    <li>En <em>Scopes</em> marcaste: <code>video.upload</code>, <code>video.publish</code> y <code>user.info.basic</code>.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Todos los cambios fueron aplicados ("Apply changes").
+                  </div>
+                </div>
+
+                <!-- PASO 3 -->
+                <div class="step-card" id="card-tiktok-step3">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" id="chkTikTokStep3" class="wizard-checkbox" />
+                      <span class="step-num">Paso 3</span>
+                      <strong>Copiar Client Key y Client Secret</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>En TikTok Developers ve al menú izquierdo a <strong>App details</strong>.</li>
+                    <li>Copia tu <strong>Client Key</strong> y tu <strong>Client Secret</strong> (haz clic en Mostrar / Show).</li>
+                    <li>Pégalos en el panel de la derecha 👉.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Las credenciales están listas en SHEEP 100.
+                  </div>
+                </div>
+
+                <!-- PASO 4 -->
+                <div class="step-card" id="card-tiktok-step4">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <input type="checkbox" id="chkTikTokStep4" class="wizard-checkbox" />
+                      <span class="step-num">Paso 4</span>
+                      <strong>Conectar y Autorizar</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Haz clic en el botón <strong>"🔗 Autorizar con TikTok"</strong> para vincular tu sesión.</li>
+                    <li>O si prefieres, ingresa tu Access Token de Sandbox directamente.</li>
+                    <li>Guarda la configuración para sincronizarla en la Nube.</li>
+                  </ol>
+                  <div class="step-verify">
+                    ✔ <strong>Verificación:</strong> Estado cambia a <em>Conectado: @cocuyo.grafic</em>.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Columna Derecha: Panel de Credenciales TikTok -->
+              <div class="wizard-config-col">
+                <div class="card">
+                  <h3>🔑 Conexión TikTok Content Posting API</h3>
+                  <p class="muted-text">
+                    Ingresa tus credenciales obtenidas en TikTok Developers para habilitar la auto-publicación de videos.
+                  </p>
+
+                  <form id="formTikTokConfig" class="wizard-config-form">
+                    <label>TikTok Client Key</label>
+                    <input type="text" id="cfgTikTokClientKey" placeholder="Ej: aw1234abcd5678ef" required />
+
+                    <label>TikTok Client Secret</label>
+                    <input type="password" id="cfgTikTokClientSecret" placeholder="••••••••••••••••" required />
+
+                    <label>Usuario de TikTok</label>
+                    <input type="text" id="cfgTikTokUsername" placeholder="@cocuyo.grafic" value="@cocuyo.grafic" />
+
+                    <label>TikTok Access Token (Opcional / Token Directo)</label>
+                    <textarea id="cfgTikTokAccessToken" rows="2" placeholder="act.example_access_token..."></textarea>
+
+                    <div class="form-row-2" style="margin-top:10px;">
+                      <button type="button" class="btn-outline full-width" id="btnTikTokOAuth">
+                        🔗 Autorizar con TikTok (OAuth)
+                      </button>
+                      <button type="submit" class="btn-primary full-width">
+                        💾 Guardar TikTok
+                      </button>
+                    </div>
+
+                    <div id="tiktokVerifyFeedback" class="verify-feedback hidden" style="margin-top:12px;"></div>
+                  </form>
+                </div>
+
+                <div class="card code-preview-card">
+                  <h3>⚙️ Flujo Oficial TikTok Content Posting API</h3>
+                  <p class="muted-text">
+                    TikTok publica videos MP4 mediante la API <code>/v2/post/publish/video/init/</code>:
+                  </p>
+                  <pre class="code-block">// Petición directa a TikTok Content Posting API
+POST https://open.tiktokapis.com/v2/post/publish/video/init/
+Headers: {
+  Authorization: "Bearer act.tiktok_token...",
+  "Content-Type": "application/json"
+}
+Body: {
+  post_info: {
+    title: "Tu copy con #hashtags",
+    privacy_level: "PUBLIC_TO_EVERYONE"
+  },
+  source_info: {
+    source: "PULL_FROM_URL",
+    video_url: "https://tu-servidor.com/video.mp4"
+  }
+}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
 
       <!-- BOTTOM NAVIGATION BAR (Mobile App / PWA View) -->
@@ -669,7 +855,11 @@ Body: {
         </button>
         <button class="bottom-nav-item" data-tab="meta-wizard">
           <span>🧭</span>
-          <small>Meta API</small>
+          <small>Meta</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="tiktok-wizard">
+          <span>🎵</span>
+          <small>TikTok</small>
         </button>
       </nav>
     </div>
@@ -728,7 +918,7 @@ Body: {
               </label>
               <label class="plat-pill">
                 <input type="checkbox" name="postPlatform" value="tiktok" />
-                <span>🎵 TikTok (Recordatorio)</span>
+                <span>🎵 TikTok (Direct Post)</span>
               </label>
             </div>
 
