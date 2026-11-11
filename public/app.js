@@ -1849,29 +1849,48 @@ function renderMetaStatusSidebar() {
 // ==========================================
 // TIKTOK WIZARD & CONFIGURATION
 // ==========================================
+async function saveTikTokConfigDirect(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const keyEl = document.getElementById('cfgTikTokClientKey');
+  const secretEl = document.getElementById('cfgTikTokClientSecret');
+  const tokenEl = document.getElementById('cfgTikTokAccessToken');
+  const userEl = document.getElementById('cfgTikTokUsername');
+
+  const key = (keyEl ? keyEl.value : '').trim();
+  const secret = (secretEl ? secretEl.value : '').trim();
+  const token = (tokenEl ? tokenEl.value : '').trim();
+  const user = (userEl ? userEl.value : '').trim() || '@cocuyo.grafic';
+
+  if (!key) {
+    showToast('⚠️ Ingresa primero tu TikTok Client Key copiado de TikTok Developers.');
+    return false;
+  }
+
+  appState.tiktokConfig = {
+    clientKey: key,
+    clientSecret: secret,
+    accessToken: token,
+    username: user,
+    connected: Boolean(key && (secret || token))
+  };
+
+  renderTikTokStatusSidebar();
+  renderTikTokWizardState();
+  await saveStateEverywhere(true);
+  showToast('✅ ¡Configuración de TikTok guardada y sincronizada!');
+  return false;
+}
+window.saveTikTokConfigDirect = saveTikTokConfigDirect;
+
 function initTikTokWizardEvents() {
   const form = document.getElementById('formTikTokConfig');
   if (form) {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const key = document.getElementById('cfgTikTokClientKey').value.trim();
-      const secret = document.getElementById('cfgTikTokClientSecret').value.trim();
-      const token = document.getElementById('cfgTikTokAccessToken').value.trim();
-      const user = document.getElementById('cfgTikTokUsername').value.trim() || '@cocuyo.grafic';
+    form.addEventListener('submit', (e) => saveTikTokConfigDirect(e));
+  }
 
-      appState.tiktokConfig = {
-        clientKey: key,
-        clientSecret: secret,
-        accessToken: token,
-        username: user,
-        connected: Boolean(key && (secret || token))
-      };
-
-      renderTikTokStatusSidebar();
-      renderTikTokWizardState();
-      await saveStateEverywhere(true);
-      showToast('✅ ¡Configuración de TikTok guardada y sincronizada en la Nube!');
-    });
+  const btnSave = document.getElementById('btnSaveTikTok');
+  if (btnSave) {
+    btnSave.addEventListener('click', (e) => saveTikTokConfigDirect(e));
   }
 
   const btnOAuth = document.getElementById('btnTikTokOAuth');

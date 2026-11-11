@@ -9,7 +9,7 @@
   <title>SHEEP 100 — Planificador & Automatizador Social</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=2.2" />
 
   <!-- Firebase SDK (Cloud Firestore + Auth en Tiempo Real para sheep-100-b8a90) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -780,7 +780,7 @@ Body: {
                     Ingresa tus credenciales obtenidas en TikTok Developers para habilitar la auto-publicación de videos.
                   </p>
 
-                  <form id="formTikTokConfig" class="wizard-config-form">
+                  <form id="formTikTokConfig" class="wizard-config-form" onsubmit="event.preventDefault(); window.saveTikTokConfigDirect && window.saveTikTokConfigDirect(event); return false;">
                     <label>TikTok Client Key</label>
                     <input type="text" id="cfgTikTokClientKey" placeholder="Pega aquí tu Client Key copiado de TikTok" required />
 
@@ -797,7 +797,7 @@ Body: {
                       <button type="button" class="btn-outline full-width" id="btnTikTokOAuth">
                         🔗 Autorizar con TikTok (OAuth)
                       </button>
-                      <button type="submit" class="btn-primary full-width">
+                      <button type="button" class="btn-primary full-width" id="btnSaveTikTok" onclick="window.saveTikTokConfigDirect && window.saveTikTokConfigDirect(event);">
                         💾 Guardar TikTok
                       </button>
                     </div>
@@ -1001,6 +1001,6 @@ Body: {
   <!-- TOAST NOTIFICATION -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="./app.js"></script>
+  <script src="./app.js?v=2.2"></script>
 </body>
 </html>
