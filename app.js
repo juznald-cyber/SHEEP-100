@@ -1053,7 +1053,216 @@ function renderPostsQueue() {
     .join('');
 }
 
-// Executes the official 2-Step Meta Instagram Graph API flow for POSTS, REELS, and 24h STORIES
+// Helper: Publish Feed Post, Video/Reel, or 24h Story directly to Facebook Page (Cocuyo Grafic)
+async function executeFacebookPagePublish(post, cfg, mediaUrl, isVideoFile, storyMode) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  const userToken = (cfg.accessToken || '').trim();
+  const fbPageId = (cfg.fbPageId || '102786358439057').trim();
+
+  if (!fbPageId) {
+    throw new Error('No se encontró el ID de tu Página de Facebook. Verifica tu Token en "Paso a Paso Meta".');
+  }
+
+  // 1. Obtener el Page Access Token oficial de la Página
+  const pageRes = await fetch(
+    `${graphBase}/${fbPageId}?fields=id,name,access_token&access_token=${encodeURIComponent(userToken)}`
+  );
+  const pageData = await pageRes.json();
+  if (!pageRes.ok || pageData.error) {
+    const msg = pageData.error ? pageData.error.message : 'No se pudo obtener el Page Access Token';
+    if (/expired/i.test(msg)) {
+      throw new Error(
+        'Tu Access Token temporal de 1 hora expiró. En Graph API Explorer haz clic en "Generate Access Token" (asegúrate de incluir el permiso pages_manage_posts) y pégalo en Paso a Paso Meta.'
+      );
+    }
+    throw new Error(`Facebook Page API: ${msg}`);
+  }
+
+  const pageToken = pageData.access_token || userToken;
+  const pageName = pageData.name || cfg.fbPageName || 'Facebook Page';
+
+  const formatFbError = (errObj) => {
+    const raw = errObj?.message || 'Error publicando en Facebook Page';
+    if (/pages_manage_posts/i.test(raw) || errObj?.code === 200) {
+      return `Para publicar en Facebook (${pageName}) necesitas añadir el permiso "pages_manage_posts" en Graph API Explorer y generar un nuevo Token.`;
+    }
+    return raw;
+  };
+
+  // CASO A: HISTORIA 24H EN PÁGINA DE FACEBOOK (photo_stories / video_stories)
+  if (storyMode) {
+    if (!isVideoFile) {
+      // Paso 1: Subir foto sin publicar (published=false)
+      const p1 = new URLSearchParams();
+      p1.append('url', mediaUrl);
+      p1.append('published', 'false');
+      p1.append('access_token', pageToken);
+
+      const r1 = await fetch(`${graphBase}/${fbPageId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: p1.toString()
+      });
+      const d1 = await r1.json();
+      if (!r1.ok || d1.error) {
+        throw new Error(formatFbError(d1.error));
+      }
+
+      // Paso 2: Publicar en /photo_stories
+      const p2 = new URLSearchParams();
+      p2.append('photo_id', d1.id);
+      p2.append('access_token', pageToken);
+
+      const r2 = await fetch(`${graphBase}/${fbPageId}/photo_stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: p2.toString()
+      });
+      const d2 = await r2.json();
+      if (!r2.ok || d2.error) {
+        throw new Error(formatFbError(d2.error));
+      }
+
+      return {
+        fbPublishId: d2.post_id || d1.id,
+        label: `⭕ Historia 24h publicada en Facebook (${pageName} • ID: ${d2.post_id || d1.id})`
+      };
+    } else {
+      // Historia en Video para Página de Facebook (/video_stories 3 fases, con respaldo a /videos)
+      const startParams = new URLSearchParams();
+      startParams.append('upload_phase', 'start');
+      startParams.append('access_token', pageToken);
+
+      const startRes = await fetch(`${graphBase}/${fbPageId}/video_stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: startParams.toString()
+      });
+      const startData = await startRes.json();
+      if (!startRes.ok || startData.error) {
+        throw new Error(formatFbError(startData.error));
+      }
+
+      const { video_id: videoId, upload_url: uploadUrl } = startData;
+      let storyTransferred = false;
+
+      // Intentar transferencia a rupload.facebook.com con encabezado file_url
+      if (uploadUrl && videoId) {
+        try {
+          const upRes = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `OAuth ${pageToken}`,
+              file_url: mediaUrl
+            }
+          });
+          const upData = await upRes.json();
+          if (upRes.ok && upData.success !== false) {
+            storyTransferred = true;
+          }
+        } catch (_) {}
+      }
+
+      if (storyTransferred) {
+        // Esperar procesamiento del video en Facebook antes de finish
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            const stRes = await fetch(
+              `${graphBase}/${videoId}?fields=status&access_token=${encodeURIComponent(pageToken)}`
+            );
+            const stData = await stRes.json();
+            const vStatus = stData?.status?.video_status;
+            if (vStatus === 'upload_complete' || vStatus === 'ready') break;
+          } catch (_) {}
+        }
+
+        const finParams = new URLSearchParams();
+        finParams.append('upload_phase', 'finish');
+        finParams.append('video_id', videoId);
+        finParams.append('access_token', pageToken);
+
+        const finRes = await fetch(`${graphBase}/${fbPageId}/video_stories`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: finParams.toString()
+        });
+        const finData = await finRes.json();
+        if (finRes.ok && !finData.error) {
+          return {
+            fbPublishId: finData.post_id || videoId,
+            label: `⭕ Historia en Video publicada en Facebook (${pageName} • ID: ${finData.post_id || videoId})`
+          };
+        }
+      }
+
+      // Respaldo directo: publicar el video en la Página de Facebook vía graph-video.facebook.com
+      const vidParams = new URLSearchParams();
+      vidParams.append('file_url', mediaUrl);
+      vidParams.append('description', post.caption || post.title || '');
+      vidParams.append('access_token', pageToken);
+
+      const vidRes = await fetch(`https://graph-video.facebook.com/v22.0/${fbPageId}/videos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: vidParams.toString()
+      });
+      const vidData = await vidRes.json();
+      if (!vidRes.ok || vidData.error) {
+        throw new Error(formatFbError(vidData.error));
+      }
+      return {
+        fbPublishId: vidData.id,
+        label: `🎬 Video publicado en Facebook (${pageName} • ID: ${vidData.id})`
+      };
+    }
+  }
+
+  // CASO B: POST NORMAL O REEL EN EL FEED DE LA PÁGINA DE FACEBOOK
+  if (isVideoFile) {
+    const vidParams = new URLSearchParams();
+    vidParams.append('file_url', mediaUrl);
+    vidParams.append('description', post.caption || '');
+    vidParams.append('published', 'true');
+    vidParams.append('access_token', pageToken);
+
+    const vidRes = await fetch(`https://graph-video.facebook.com/v22.0/${fbPageId}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: vidParams.toString()
+    });
+    const vidData = await vidRes.json();
+    if (!vidRes.ok || vidData.error) {
+      throw new Error(formatFbError(vidData.error));
+    }
+    return {
+      fbPublishId: vidData.id,
+      label: `📘 Video publicado en Facebook (${pageName} • ID: ${vidData.id})`
+    };
+  } else {
+    const phParams = new URLSearchParams();
+    phParams.append('url', mediaUrl);
+    phParams.append('caption', post.caption || '');
+    phParams.append('published', 'true');
+    phParams.append('access_token', pageToken);
+
+    const phRes = await fetch(`${graphBase}/${fbPageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: phParams.toString()
+    });
+    const phData = await phRes.json();
+    if (!phRes.ok || phData.error) {
+      throw new Error(formatFbError(phData.error));
+    }
+    return {
+      fbPublishId: phData.post_id || phData.id,
+      label: `📘 Post publicado en Facebook (${pageName} • ID: ${phData.post_id || phData.id})`
+    };
+  }
+}
+
+// Executes the official Meta Graph API flow for INSTAGRAM, FACEBOOK PAGE, or BOTH (POSTS, REELS, and 24h STORIES)
 async function executeMetaPublishFlow(post) {
   const cfg = appState.metaConfig || {};
   const accessToken = (cfg.accessToken || '').trim();
@@ -1065,18 +1274,22 @@ async function executeMetaPublishFlow(post) {
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
   const storyMode = isPostStory(post);
 
-  if (!accessToken || !igUserId) {
+  const platforms = Array.isArray(post.platforms) && post.platforms.length ? post.platforms : ['instagram'];
+  const wantInstagram = platforms.includes('instagram');
+  const wantFacebook = platforms.includes('facebook');
+
+  if (!accessToken || (!igUserId && !cfg.fbPageId)) {
     if (cfg.simulationFallback !== false) {
       return {
         success: true,
         containerId: `SIM_${Date.now()}`,
         mediaPublishId: `SIM_POST_${Date.now()}`,
         message: storyMode
-          ? '⭕ Historia 24h publicada en Modo Simulación (Conecta tu Token en "Paso a Paso Meta" para envío directo a tus Historias de Instagram).'
-          : '📸 Post publicado en Modo Simulación (Conecta tu Token en "Paso a Paso Meta" para envío real a Instagram).'
+          ? '⭕ Historia 24h publicada en Modo Simulación (Conecta tu Token en "Paso a Paso Meta" para envío directo).'
+          : '📸 Post publicado en Modo Simulación (Conecta tu Token en "Paso a Paso Meta" para envío real).'
       };
     }
-    throw new Error('Falta configurar el Access Token o el Instagram Business User ID en la pestaña "Paso a Paso Meta".');
+    throw new Error('Falta configurar el Access Token en la pestaña "Paso a Paso Meta".');
   }
 
   if (!isPublicHttp) {
@@ -1085,91 +1298,111 @@ async function executeMetaPublishFlow(post) {
         success: true,
         containerId: `LOCAL_${Date.now()}`,
         mediaPublishId: `READY_${Date.now()}`,
-        message: 'Marcado como listo (Nota de Meta API: para publicar directamente en Instagram la foto/video requiere URL pública https://).'
+        message: 'Marcado como listo (Nota de Meta API: para publicar directamente la foto/video requiere URL pública https://).'
       };
     }
     throw new Error('La API de Meta exige una URL pública https:// en formato JPG o MP4.');
   }
 
-  const graphBase = 'https://graph.facebook.com/v22.0';
-  const containerParams = new URLSearchParams();
-  containerParams.append('access_token', accessToken);
+  const resultsMessages = [];
+  let lastContainerId = '';
+  let lastPublishId = '';
 
-  if (storyMode) {
-    // Official Meta Graph API Stories Payload
-    containerParams.append('media_type', 'STORIES');
-    if (isVideoFile) {
+  // 1. PUBLICAR EN INSTAGRAM (Solo si el usuario seleccionó Instagram)
+  if (wantInstagram) {
+    const graphBase = 'https://graph.facebook.com/v22.0';
+    const containerParams = new URLSearchParams();
+    containerParams.append('access_token', accessToken);
+
+    if (storyMode) {
+      containerParams.append('media_type', 'STORIES');
+      if (isVideoFile) {
+        containerParams.append('video_url', mediaUrl);
+      } else {
+        containerParams.append('image_url', mediaUrl);
+      }
+    } else if (isVideoFile || post.postFormat === 'REEL' || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+      containerParams.append('media_type', 'REELS');
       containerParams.append('video_url', mediaUrl);
+      containerParams.append('caption', post.caption || '');
     } else {
       containerParams.append('image_url', mediaUrl);
+      containerParams.append('caption', post.caption || '');
     }
-  } else if (isVideoFile || post.postFormat === 'REEL' || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
-    containerParams.append('media_type', 'REELS');
-    containerParams.append('video_url', mediaUrl);
-    containerParams.append('caption', post.caption || '');
-  } else {
-    containerParams.append('image_url', mediaUrl);
-    containerParams.append('caption', post.caption || '');
-  }
 
-  // Step 1: Create media container
-  const step1Res = await fetch(`${graphBase}/${igUserId}/media`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: containerParams.toString()
-  });
-  const step1Data = await step1Res.json();
-  if (!step1Res.ok || step1Data.error) {
-    throw new Error(step1Data.error ? step1Data.error.message : 'Error creando contenedor en Meta Graph API');
-  }
-
-  const creationId = step1Data.id;
-
-  // Step 1.5: Poll container status until status_code === 'FINISHED' (Required by Meta so "Media ID is not available" never occurs)
-  const maxAttempts = isVideoFile || storyMode ? 30 : 10;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    try {
-      const stRes = await fetch(
-        `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
-      );
-      const stData = await stRes.json();
-      if (stData.status_code === 'FINISHED') {
-        break;
+    const step1Res = await fetch(`${graphBase}/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: containerParams.toString()
+    });
+    const step1Data = await step1Res.json();
+    if (!step1Res.ok || step1Data.error) {
+      const msg = step1Data.error ? step1Data.error.message : 'Error creando contenedor en Instagram Graph API';
+      if (/expired/i.test(msg)) {
+        throw new Error(
+          'Tu Access Token de 1 hora expiró. En Graph API Explorer haz clic en "Generate Access Token" y pégalo en Paso a Paso Meta.'
+        );
       }
-      if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
-        throw new Error(`Meta rechazó el procesamiento del archivo: ${stData.status || stData.status_code}`);
-      }
-      if (attempt === 2 || attempt === 6) {
-        showToast(`⏳ Meta está procesando tu ${isVideoFile ? 'video MP4' : 'archivo'} (${attempt * 3}s)...`);
-      }
-    } catch (pollErr) {
-      if (pollErr.message && pollErr.message.startsWith('Meta rechazó')) throw pollErr;
+      throw new Error(msg);
     }
+
+    const creationId = step1Data.id;
+    lastContainerId = creationId;
+
+    const maxAttempts = isVideoFile || storyMode ? 30 : 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const stRes = await fetch(
+          `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+        );
+        const stData = await stRes.json();
+        if (stData.status_code === 'FINISHED') break;
+        if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+          throw new Error(`Instagram rechazó el procesamiento del archivo: ${stData.status || stData.status_code}`);
+        }
+        if (attempt === 2 || attempt === 6) {
+          showToast(`⏳ Instagram está procesando tu ${isVideoFile ? 'video MP4' : 'archivo'} (${attempt * 3}s)...`);
+        }
+      } catch (pollErr) {
+        if (pollErr.message && pollErr.message.startsWith('Instagram rechazó')) throw pollErr;
+      }
+    }
+
+    const publishParams = new URLSearchParams();
+    publishParams.append('creation_id', creationId);
+    publishParams.append('access_token', accessToken);
+
+    const step2Res = await fetch(`${graphBase}/${igUserId}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: publishParams.toString()
+    });
+    const step2Data = await step2Res.json();
+    if (!step2Res.ok || step2Data.error) {
+      throw new Error(step2Data.error ? step2Data.error.message : 'Error en media_publish de Instagram Graph API');
+    }
+
+    lastPublishId = step2Data.id;
+    resultsMessages.push(
+      storyMode
+        ? `⭕ Historia publicada en Instagram Stories (ID: ${step2Data.id})`
+        : `📸 Post publicado en Instagram (ID: ${step2Data.id})`
+    );
   }
 
-  // Step 2: Publish container (media_publish)
-  const publishParams = new URLSearchParams();
-  publishParams.append('creation_id', creationId);
-  publishParams.append('access_token', accessToken);
-
-  const step2Res = await fetch(`${graphBase}/${igUserId}/media_publish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: publishParams.toString()
-  });
-  const step2Data = await step2Res.json();
-  if (!step2Res.ok || step2Data.error) {
-    throw new Error(step2Data.error ? step2Data.error.message : 'Error en media_publish de Meta Graph API');
+  // 2. PUBLICAR EN PÁGINA DE FACEBOOK (Solo si el usuario seleccionó Facebook)
+  if (wantFacebook) {
+    const fbRes = await executeFacebookPagePublish(post, cfg, mediaUrl, isVideoFile, storyMode);
+    lastPublishId = lastPublishId || fbRes.fbPublishId;
+    resultsMessages.push(fbRes.label);
   }
 
   return {
     success: true,
-    containerId: creationId,
-    mediaPublishId: step2Data.id,
-    message: storyMode
-      ? `⭕ ¡Historia publicada en vivo en Instagram Stories! (ID: ${step2Data.id})`
-      : `📸 ¡Post publicado en vivo en Instagram! (ID: ${step2Data.id})`
+    containerId: lastContainerId,
+    mediaPublishId: lastPublishId,
+    message: resultsMessages.join(' + ')
   };
 }
 
