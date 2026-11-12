@@ -192,13 +192,13 @@ async function deployFirestoreRules(token) {
 function pushToGitHub(commitMsg) {
   console.log('🐙 [3/3] Subiendo cambios al repositorio GitHub (juznald-cyber/SHEEP-100)...');
   mirrorPublicToRoot();
-  execSync('git add -A', { stdio: 'inherit' });
+  execSync('git add -A -- ":!.github/workflows"', { stdio: 'inherit' });
   try {
     execSync(`git commit -m "${commitMsg.replace(/"/g, "'")}"`, { stdio: 'inherit' });
   } catch (_) {
     console.log('ℹ️ Sin cambios nuevos que confirmar en Git.');
   }
-  execSync('git push -u origin main --force', { stdio: 'inherit' });
+  execSync('git push -u origin main', { stdio: 'inherit' });
   console.log('✅ Repositorio GitHub actualizado: https://github.com/juznald-cyber/SHEEP-100');
 }
 

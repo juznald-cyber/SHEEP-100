@@ -175,7 +175,7 @@
         "instagram",
         "facebook"
       ],
-      "status": "scheduled",
+      "status": "failed",
       "scheduledAt": "2026-11-12T16:46:30.460Z",
       "firstComment": "Sticker de enlace: https://sheep-100-b8a90.web.app",
       "gridOrder": 0,
@@ -190,6 +190,10 @@
         {
           "time": "2026-11-12T12:46:30.460Z",
           "message": "Historia (24h) programada para publicación automática."
+        },
+        {
+          "time": "2026-11-12T16:46:33.691Z",
+          "message": "[Auto-Scheduler Error] Paso 1 (Contenedor Instagram) falló: Error validating access token: Session has expired on Thursday, 12-Nov-26 06:00:00 PST. The current time is Thursday, 12-Nov-26 08:45:16 PST. (Code 190)"
         }
       ]
     },
@@ -287,5 +291,13 @@
       ]
     }
   ],
-  "activityLogs": []
+  "activityLogs": [
+    {
+      "id": "log-1794501993698-vckm",
+      "timestamp": "2026-11-12T16:46:33.699Z",
+      "type": "error",
+      "title": "Fallo en Publicación Automática",
+      "detail": "\"Historia: Encuesta & Oferta Flash 24h\": Paso 1 (Contenedor Instagram) falló: Error validating access token: Session has expired on Thursday, 12-Nov-26 06:00:00 PST. The current time is Thursday, 12-Nov-26 08:45:16 PST. (Code 190)"
+    }
+  ]
 }

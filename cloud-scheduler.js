@@ -276,14 +276,202 @@ async function publishSingleFacebookPageItem({ fbPageId, pageToken, pageName, me
   }
 }
 
-async function publishCloudPost(post, metaConfig, mediaLibrary = []) {
+async function refreshTikTokAccessToken(tiktokConfig) {
+  if (!tiktokConfig?.clientKey || !tiktokConfig?.clientSecret || !tiktokConfig?.refreshToken) {
+    return null;
+  }
+  const params = new URLSearchParams({
+    client_key: tiktokConfig.clientKey.trim(),
+    client_secret: tiktokConfig.clientSecret.trim(),
+    grant_type: 'refresh_token',
+    refresh_token: tiktokConfig.refreshToken.trim()
+  });
+
+  const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !data.access_token) {
+    throw new Error(
+      data.error_description || data.error || 'No se pudo renovar automáticamente el Access Token de TikTok'
+    );
+  }
+  tiktokConfig.accessToken = data.access_token;
+  if (data.refresh_token) tiktokConfig.refreshToken = data.refresh_token;
+  if (data.open_id) tiktokConfig.openId = data.open_id;
+  tiktokConfig.tokenUpdatedAt = new Date().toISOString();
+  return data.access_token;
+}
+
+async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title, deliveryMode, tiktokConfig }) {
+  let token = (accessToken || tiktokConfig?.accessToken || '').trim();
+  if (!token && tiktokConfig?.refreshToken) {
+    token = await refreshTikTokAccessToken(tiktokConfig);
+  }
+  if (!token) {
+    throw new Error('Falta el Access Token de TikTok. Conéctalo en la pestaña "🎵 Paso a Paso TikTok".');
+  }
+
+  const norm = normalizeCloudMedia(mediaUrl, 'video');
+  const downloadUrl = norm.publicUrl || mediaUrl;
+
+  const videoRes = await fetch(downloadUrl, {
+    redirect: 'follow',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36'
+    }
+  });
+  if (!videoRes.ok) {
+    throw new Error(`No se pudo descargar el archivo MP4 desde Google Drive/URL (HTTP ${videoRes.status}).`);
+  }
+
+  const contentType = (videoRes.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      'Google Drive devolvió una página HTML en vez del video MP4. Verifica que el archivo en Drive tenga acceso "Cualquier persona con el enlace".'
+    );
+  }
+
+  const arrayBuf = await videoRes.arrayBuffer();
+  const videoBuffer = Buffer.from(arrayBuf);
+  const videoSize = videoBuffer.length;
+
+  if (videoSize < 1024) {
+    throw new Error('El archivo descargado es demasiado pequeño o no es un video MP4 válido.');
+  }
+
+  let privacyLevel = 'SELF_ONLY';
+  const queryCreatorInfo = async (tok) => {
+    const ciRes = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${tok}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify({})
+    });
+    return { status: ciRes.status, data: await ciRes.json().catch(() => ({})) };
+  };
+
+  let ci = await queryCreatorInfo(token);
+  if ((ci.status === 401 || ci.data?.error?.code === 'access_token_invalid') && tiktokConfig?.refreshToken) {
+    token = await refreshTikTokAccessToken(tiktokConfig);
+    ci = await queryCreatorInfo(token);
+  }
+
+  const options = ci.data?.data?.privacy_level_options;
+  if (Array.isArray(options) && options.length > 0) {
+    if (options.includes('SELF_ONLY')) {
+      privacyLevel = 'SELF_ONLY';
+    } else {
+      privacyLevel = options[0];
+    }
+  }
+
+  const chunkSize = videoSize;
+  const totalChunkCount = 1;
+  const safeTitle = (title || 'Publicado desde SHEEP 100 #sheep100').slice(0, 2100);
+  const wantInbox = deliveryMode === 'INBOX';
+
+  const callInitEndpoint = async (useInbox) => {
+    const endpoint = useInbox
+      ? 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/'
+      : 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+
+    const bodyObj = useInbox
+      ? {
+          source_info: {
+            source: 'FILE_UPLOAD',
+            video_size: videoSize,
+            chunk_size: chunkSize,
+            total_chunk_count: totalChunkCount
+          }
+        }
+      : {
+          post_info: {
+            title: safeTitle,
+            privacy_level: privacyLevel,
+            disable_duet: false,
+            disable_comment: false,
+            disable_stitch: false
+          },
+          source_info: {
+            source: 'FILE_UPLOAD',
+            video_size: videoSize,
+            chunk_size: chunkSize,
+            total_chunk_count: totalChunkCount
+          }
+        };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify(bodyObj)
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data, usedInbox: useInbox };
+  };
+
+  let initResult = await callInitEndpoint(wantInbox);
+  if (
+    (!initResult.ok || (initResult.data?.error?.code && initResult.data.error.code !== 'ok')) &&
+    !wantInbox
+  ) {
+    const fallbackInbox = await callInitEndpoint(true);
+    if (fallbackInbox.ok && (!fallbackInbox.data?.error?.code || fallbackInbox.data.error.code === 'ok')) {
+      initResult = fallbackInbox;
+    }
+  }
+
+  const errCode = initResult.data?.error?.code;
+  if (!initResult.ok || (errCode && errCode !== 'ok')) {
+    const errMsg = initResult.data?.error?.message || `Error HTTP ${initResult.status}`;
+    throw new Error(`TikTok API (${errCode || initResult.status}): ${errMsg}`);
+  }
+
+  const publishId = initResult.data?.data?.publish_id;
+  const uploadUrl = initResult.data?.data?.upload_url;
+  if (!uploadUrl) {
+    throw new Error('TikTok no devolvió upload_url al inicializar FILE_UPLOAD.');
+  }
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Length': String(videoSize),
+      'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`
+    },
+    body: videoBuffer
+  });
+
+  if (!putRes.ok && putRes.status !== 201 && putRes.status !== 206) {
+    const errText = await putRes.text().catch(() => '');
+    throw new Error(`Error subiendo bytes MP4 a TikTok (HTTP ${putRes.status}): ${errText.slice(0, 180)}`);
+  }
+
+  const label = initResult.usedInbox
+    ? `🎵 Video enviado a la Bandeja de TikTok (@${tiktokConfig?.username || 'TikTok'} • ID: ${publishId})`
+    : `🎵 Video publicado en TikTok (@${tiktokConfig?.username || 'TikTok'} • Modo: ${privacyLevel} • ID: ${publishId})`;
+
+  return {
+    publishId,
+    usedInbox: initResult.usedInbox,
+    privacyLevel,
+    refreshedAccessToken: token,
+    label
+  };
+}
+
+async function publishCloudPost(post, metaConfig, mediaLibrary = [], tiktokConfig = {}) {
   const accessToken = (metaConfig.accessToken || '').trim();
   const igUserId = (metaConfig.igUserId || '').trim();
   const fbPageId = (metaConfig.fbPageId || '102786358439057').trim();
-
-  if (!accessToken) {
-    throw new Error('No hay Access Token configurado en Firebase.');
-  }
 
   let linkedType = 'image';
   if (post.mediaId && Array.isArray(mediaLibrary)) {
@@ -315,6 +503,11 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = []) {
   const platforms = Array.isArray(post.platforms) && post.platforms.length ? post.platforms : ['instagram'];
   const wantInstagram = platforms.includes('instagram');
   const wantFacebook = platforms.includes('facebook');
+  const wantTikTok = platforms.includes('tiktok');
+
+  if ((wantInstagram || wantFacebook) && !accessToken) {
+    throw new Error('No hay Access Token de Meta configurado en Firebase.');
+  }
 
   const messages = [];
   let lastContainerId = '';
@@ -368,6 +561,21 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = []) {
     }
   }
 
+  if (wantTikTok) {
+    if (!isVid) {
+      throw new Error('TikTok Content Posting API requiere un archivo de video MP4.');
+    }
+    const ttRes = await publishVideoToTikTokViaFileUpload({
+      accessToken: tiktokConfig?.accessToken,
+      mediaUrl,
+      title: post.caption || post.title || '',
+      deliveryMode: tiktokConfig?.deliveryMode || 'DIRECT',
+      tiktokConfig
+    });
+    lastPublishId = ttRes.publishId || lastPublishId;
+    messages.push(ttRes.label);
+  }
+
   return {
     containerId: lastContainerId,
     mediaPublishId: lastPublishId,
@@ -385,7 +593,7 @@ async function processRelayJobIfAny() {
     const job = JSON.parse(rawPayload);
     if (job.status !== 'pending' || !job.jobId) return;
 
-    console.log(`☁️ Procesando trabajo de relay en la nube: ${job.jobId} (${job.mode})`);
+    console.log(`☁️ Procesando trabajo de relay en la nube: ${job.jobId} (${job.provider || job.mode})`);
     job.status = 'processing';
     await fetch(FIRESTORE_RELAY_URL, {
       method: 'PATCH',
@@ -399,23 +607,74 @@ async function processRelayJobIfAny() {
     });
 
     try {
-      const norm = normalizeCloudMedia(job.mediaUrl, 'video');
-      const result = await publishFacebookThreePhaseVideo({
-        fbPageId: job.fbPageId || '102786358439057',
-        pageToken: job.pageToken,
-        pageName: job.pageName || 'Facebook Page',
-        mediaUrl: norm.publicUrl || job.mediaUrl,
-        caption: job.caption || '',
-        mode: job.mode === 'REEL' ? 'REEL' : 'STORY'
-      });
+      let doneJob = null;
 
-      const doneJob = {
-        jobId: job.jobId,
-        status: 'done',
-        fbPublishId: result.publishId,
-        videoId: result.videoId,
-        label: result.label
-      };
+      if (job.provider === 'TIKTOK_EXCHANGE') {
+        const params = new URLSearchParams({
+          client_key: (job.clientKey || '').trim(),
+          client_secret: (job.clientSecret || '').trim(),
+          code: (job.code || '').trim(),
+          grant_type: 'authorization_code',
+          redirect_uri: (job.redirectUri || '').trim()
+        });
+        if (job.codeVerifier) {
+          params.append('code_verifier', job.codeVerifier.trim());
+        }
+        const tkRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+        const tkData = await tkRes.json();
+        if (!tkRes.ok || tkData.error || !tkData.access_token) {
+          throw new Error(tkData.error_description || tkData.error || 'Error canjeando código OAuth de TikTok');
+        }
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          accessToken: tkData.access_token,
+          refreshToken: tkData.refresh_token || '',
+          openId: tkData.open_id || '',
+          scope: tkData.scope || '',
+          expiresIn: tkData.expires_in || 86400
+        };
+      } else if (job.provider === 'TIKTOK_PUBLISH') {
+        const ttResult = await publishVideoToTikTokViaFileUpload({
+          accessToken: job.accessToken,
+          mediaUrl: job.mediaUrl,
+          title: job.title || job.caption || '',
+          deliveryMode: job.deliveryMode || 'DIRECT',
+          tiktokConfig: job.tiktokConfig || {}
+        });
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          publishId: ttResult.publishId,
+          usedInbox: ttResult.usedInbox,
+          privacyLevel: ttResult.privacyLevel,
+          refreshedAccessToken: ttResult.refreshedAccessToken,
+          label: ttResult.label
+        };
+      } else {
+        const norm = normalizeCloudMedia(job.mediaUrl, 'video');
+        const result = await publishFacebookThreePhaseVideo({
+          fbPageId: job.fbPageId || '102786358439057',
+          pageToken: job.pageToken,
+          pageName: job.pageName || 'Facebook Page',
+          mediaUrl: norm.publicUrl || job.mediaUrl,
+          caption: job.caption || '',
+          mode: job.mode === 'REEL' ? 'REEL' : 'STORY'
+        });
+
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          fbPublishId: result.publishId,
+          videoId: result.videoId,
+          label: result.label
+        };
+      }
+
       await fetch(FIRESTORE_RELAY_URL, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -426,7 +685,7 @@ async function processRelayJobIfAny() {
           }
         })
       });
-      console.log(`✅ Relay completado: ${result.label}`);
+      console.log(`✅ Relay completado: ${doneJob.label || doneJob.jobId}`);
     } catch (jobErr) {
       const errJob = {
         jobId: job.jobId,
@@ -488,7 +747,12 @@ async function runCloudScheduler() {
   for (const post of duePosts) {
     console.log(`👉 Publicando "${post.title}" (${post.postFormat || 'POST'}) en ${(post.platforms || []).join(', ')}...`);
     try {
-      const result = await publishCloudPost(post, state.metaConfig || {}, state.mediaLibrary || []);
+      const result = await publishCloudPost(
+        post,
+        state.metaConfig || {},
+        state.mediaLibrary || [],
+        state.tiktokConfig || {}
+      );
       post.status = 'published';
       post.publishedAt = new Date().toISOString();
       post.metaContainerId = result.containerId;

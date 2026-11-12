@@ -142,9 +142,16 @@
             <div class="nav-desc" id="wizardProgressBadge">Guía Modo Desarrollo</div>
           </div>
         </button>
+        <button class="nav-item nav-item-highlight" data-tab="tiktok-wizard">
+          <span class="nav-icon">🎵</span>
+          <div>
+            <div class="nav-label">Paso a Paso TikTok</div>
+            <div class="nav-desc" id="tiktokProgressBadge">Sandbox / Direct Post</div>
+          </div>
+        </button>
       </nav>
 
-      <!-- Estado de Conexión con Meta -->
+      <!-- Estado de Conexión con Meta + TikTok -->
       <div class="meta-status-card" id="sidebarMetaCard">
         <div class="meta-status-header">
           <span class="status-dot" id="metaStatusDot"></span>
@@ -153,9 +160,18 @@
         <p id="metaStatusDesc" class="meta-status-desc">
           Configura tu Token de Meta en 5 pasos sin pasar por App Review.
         </p>
-        <button class="btn-secondary btn-sm full-width" onclick="switchTab('meta-wizard')">
-          Configurar Meta API →
-        </button>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
+          <span class="status-dot" id="tiktokStatusDot"></span>
+          <small id="tiktokStatusTitle" style="font-size:0.74rem;color:#cbd5e1;">TikTok: Pendiente</small>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn-secondary btn-sm full-width" onclick="switchTab('meta-wizard')">
+            Meta API →
+          </button>
+          <button class="btn-secondary btn-sm full-width" onclick="switchTab('tiktok-wizard')">
+            🎵 TikTok →
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -761,6 +777,179 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
           </div>
         </section>
 
+        <!-- ==========================================
+             TAB 7: PASO A PASO TIKTOK (SANDBOX + FILE_UPLOAD DRIVE)
+             ========================================== -->
+        <section class="tab-panel" id="tab-tiktok-wizard">
+          <div class="wizard-layout">
+            <div class="meta-hero-banner" style="background:linear-gradient(135deg, rgba(15,23,42,0.95), rgba(236,72,153,0.18), rgba(6,182,212,0.18));border-color:rgba(6,182,212,0.4);">
+              <div>
+                <span class="hero-pill" style="background:rgba(6,182,212,0.2);color:#67e8f9;">🎵 TIKTOK CONTENT POSTING API v2 • SUBIDA BINARIA DESDE GOOGLE DRIVE</span>
+                <h3>Conecta tu TikTok (@cocuyo.grafic) sin rechazos de Dominio ni Comandos Manuales</h3>
+                <p>
+                  SHEEP 100 utiliza el modo oficial <strong><code>FILE_UPLOAD</code> (Transferencia Binaria de Chunks MP4)</strong>.
+                  Esto significa que cuando programas un video desde <strong>Google Drive</strong>, nuestro servidor y el <strong>Motor 24/7 en la Nube (con tu PC apagado)</strong> descargan el archivo <code>.mp4</code> en memoria y se lo inyectan directamente a TikTok sin pedirte verificar el dominio <code>drive.google.com</code>.
+                </p>
+              </div>
+              <div class="wizard-progress-circle" style="border-color:#06b6d4;">
+                <strong id="tiktokStatusBadgeBig">LISTO</strong>
+                <span>FILE_UPLOAD</span>
+              </div>
+            </div>
+
+            <div class="wizard-grid">
+              <!-- Columna Izquierda: Guía de 4 Pasos -->
+              <div class="wizard-steps-col">
+                <h3>✅ Cómo Funciona tu Conexión con TikTok en 4 Pasos</h3>
+
+                <div class="step-card completed">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <span class="step-num">Paso 1</span>
+                      <strong>Activar Sandbox en TikTok for Developers (Sin Auditoría)</strong>
+                    </label>
+                    <a href="https://developers.tiktok.com/apps" target="_blank" rel="noopener" class="btn-link">
+                      Abrir TikTok Developers ↗
+                    </a>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Entra a <a href="https://developers.tiktok.com/apps" target="_blank" rel="noopener">developers.tiktok.com/apps</a>, selecciona tu App y activa el modo <strong>Sandbox</strong>.</li>
+                    <li>En <strong>Target Users (Usuarios de prueba)</strong> agrega tu cuenta <code>@cocuyo.grafic</code>.</li>
+                    <li>En <strong>Products</strong> añade <strong>Login Kit</strong> y <strong>Content Posting API</strong> (activa el switch <em>Direct Post</em>).</li>
+                    <li>En <strong>Scopes</strong> habilita los 3 permisos: <code>user.info.basic</code>, <code>video.publish</code> y <code>video.upload</code>.</li>
+                  </ol>
+                </div>
+
+                <div class="step-card completed">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <span class="step-num">Paso 2</span>
+                      <strong>Configurar el Redirect URI en Login Kit</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>Dentro de tu Sandbox en TikTok Developers, baja a la sección <strong>Login Kit → Redirect URI</strong>.</li>
+                    <li>Asegúrate de tener registrada exactamente una de estas direcciones (haz clic para copiar):
+                      <div class="perm-chips" style="margin-top:6px;">
+                        <span class="perm-chip" onclick="copyText('https://juznald-cyber.github.io/SHEEP-100/')">https://juznald-cyber.github.io/SHEEP-100/ 📋</span>
+                        <span class="perm-chip" onclick="copyText('https://sheep-100-b8a90.web.app/')">https://sheep-100-b8a90.web.app/ 📋</span>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+
+                <div class="step-card completed">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <span class="step-num">Paso 3</span>
+                      <strong>Autorizar con 1 Clic (Canje OAuth Automático sin PowerShell)</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li>A la derecha 👉 verifica tu <strong>Client Key</strong> (ya pre-cargado: <code>sbawbyxlo8yktgrxxv</code>) y pega tu <strong>Client Secret</strong> de TikTok Sandbox.</li>
+                    <li>Haz clic en <strong>"🔗 1. Autorizar con TikTok (OAuth 1 Clic)"</strong>.</li>
+                    <li>Al regresar a SHEEP 100, la aplicación detectará el código <code>?code=...</code> en la URL y <strong>lo canjeará automáticamente por tu Access Token + Refresh Token (365 días)</strong> sin que tengas que usar PowerShell.</li>
+                  </ol>
+                </div>
+
+                <div class="step-card completed">
+                  <div class="step-header">
+                    <label class="step-check-label">
+                      <span class="step-num">Paso 4</span>
+                      <strong>¿Cómo se ven los videos publicados desde Google Drive?</strong>
+                    </label>
+                  </div>
+                  <ol class="step-instructions">
+                    <li><strong>Modo Direct Post (Sandbox):</strong> El video MP4 de tu Google Drive se publica directo en tu perfil <code>@cocuyo.grafic</code> con privacidad <strong>Solo yo / Privado</strong> (regla de TikTok Sandbox). Luego abres tu app de TikTok y le cambias la privacidad a <strong>Público</strong> en 2 toques.</li>
+                    <li><strong>Modo Bandeja de Entrada (Inbox / Borrador):</strong> El video llega como notificación a la bandeja del sistema de tu app de TikTok lista para añadir música en tendencia y publicar como Público.</li>
+                    <li><strong>☁️ 24/7 con PC Apagado:</strong> Nuestro motor en GitHub Actions renueva tu <code>access_token</code> automáticamente usando tu <code>refresh_token</code> y sube tus videos desde Google Drive a la hora programada aunque tu PC esté apagado.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <!-- Columna Derecha: Formulario de Conexión TikTok -->
+              <div class="wizard-config-col">
+                <div class="card">
+                  <h3>🎵 Credenciales y Conexión Automática con TikTok</h3>
+                  <p class="muted-text">
+                    Configura tu Sandbox de TikTok una sola vez. Se sincronizará automáticamente con Firebase (<code>sheep-100-b8a90</code>) para publicar incluso con el PC apagado.
+                  </p>
+
+                  <form id="formTikTokConfig" class="meta-config-form">
+                    <div class="form-row-2">
+                      <div>
+                        <label>TikTok Client Key (Sandbox)</label>
+                        <input type="text" id="cfgTikTokClientKey" value="sbawbyxlo8yktgrxxv" placeholder="sbawbyxlo8yktgrxxv" required />
+                      </div>
+                      <div>
+                        <label>TikTok Client Secret (Sandbox)</label>
+                        <input type="password" id="cfgTikTokClientSecret" placeholder="Pega tu Client Secret de TikTok" />
+                      </div>
+                    </div>
+
+                    <div class="form-row-2">
+                      <div>
+                        <label>Usuario de TikTok (@handle)</label>
+                        <input type="text" id="cfgTikTokUsername" value="cocuyo.grafic" placeholder="cocuyo.grafic" />
+                      </div>
+                      <div>
+                        <label>Modo de Entrega en TikTok</label>
+                        <select id="cfgTikTokDeliveryMode">
+                          <option value="DIRECT">🚀 Direct Post (Publicación Directa al Perfil)</option>
+                          <option value="INBOX">📥 Enviar a Bandeja de Entrada (Inbox / Borrador App)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <label>Redirect URI registrada en tu Login Kit de TikTok</label>
+                    <select id="cfgTikTokRedirectUri">
+                      <option value="https://juznald-cyber.github.io/SHEEP-100/">https://juznald-cyber.github.io/SHEEP-100/ (GitHub Pages)</option>
+                      <option value="https://sheep-100-b8a90.web.app/">https://sheep-100-b8a90.web.app/ (Firebase Hosting)</option>
+                      <option value="http://localhost:3000/">http://localhost:3000/ (Servidor Local)</option>
+                    </select>
+
+                    <div class="btn-row" style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;">
+                      <button type="button" class="btn-primary full-width" id="btnTikTokOAuthConnect" style="background:linear-gradient(135deg,#06b6d4,#ec4899);">
+                        🔗 1. Autorizar y Conectar con TikTok (OAuth 1 Clic)
+                      </button>
+                    </div>
+
+                    <div id="tiktokVerifyFeedback" class="verify-feedback hidden"></div>
+
+                    <label>Si autorizaste en otra pestaña y la URL tiene <code>?code=...</code>, pégala aquí (Opcional — Canje Automático)</label>
+                    <div style="display:flex;gap:8px;">
+                      <input type="text" id="cfgTikTokManualCodeUrl" placeholder="Pega aquí la URL completa con ?code=... o el código si se abrió en otra ventana" />
+                      <button type="button" class="btn-outline btn-sm" id="btnTikTokExchangeCodeNow" style="white-space:nowrap;">
+                        ⚡ Canjear Código
+                      </button>
+                    </div>
+
+                    <hr class="divider" />
+
+                    <label>Access Token de TikTok (<code>act.!...</code> — Se llena solo al autorizar)</label>
+                    <textarea id="cfgTikTokAccessToken" rows="2" placeholder="act.!... (Se obtiene automáticamente al pulsar Autorizar o Canjear Código)"></textarea>
+
+                    <div class="form-row-2">
+                      <div>
+                        <label>Refresh Token (Renovación Automática 365 días)</label>
+                        <input type="password" id="cfgTikTokRefreshToken" placeholder="rft.!... (Se llena automáticamente)" />
+                      </div>
+                      <div>
+                        <label>Open ID de Cuenta TikTok</label>
+                        <input type="text" id="cfgTikTokOpenId" placeholder="Open ID autodetectado" />
+                      </div>
+                    </div>
+
+                    <button type="submit" class="btn-secondary full-width">
+                      💾 Guardar Configuración de TikTok en Nube y Local
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
 
       <!-- BOTTOM NAVIGATION BAR (Mobile App / PWA View) -->
@@ -784,6 +973,10 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
         <button class="bottom-nav-item" data-tab="meta-wizard">
           <span>🧭</span>
           <small>Meta API</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="tiktok-wizard">
+          <span>🎵</span>
+          <small>TikTok</small>
         </button>
       </nav>
     </div>
@@ -885,6 +1078,10 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
               <label class="plat-pill">
                 <input type="checkbox" name="postPlatform" value="facebook" />
                 <span>📘 Facebook Page</span>
+              </label>
+              <label class="plat-pill">
+                <input type="checkbox" name="postPlatform" value="tiktok" />
+                <span>🎵 TikTok (Video MP4)</span>
               </label>
             </div>
 

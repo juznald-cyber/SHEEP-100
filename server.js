@@ -79,6 +79,196 @@ app.get('/api/resolve-media-url', async (req, res) => {
   }
 });
 
+// Helper: Refresh TikTok access_token using 365-day refresh_token
+async function refreshTikTokAccessToken(tiktokConfig = {}) {
+  const { clientKey, clientSecret, refreshToken } = tiktokConfig;
+  if (!clientKey || !clientSecret || !refreshToken) {
+    return tiktokConfig.accessToken || '';
+  }
+  try {
+    const bodyParams = new URLSearchParams({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    });
+    const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: bodyParams.toString()
+    });
+    const data = await res.json();
+    const tokenObj = data.data || data;
+    if (res.ok && tokenObj.access_token) {
+      tiktokConfig.accessToken = tokenObj.access_token;
+      if (tokenObj.refresh_token) tiktokConfig.refreshToken = tokenObj.refresh_token;
+      if (tokenObj.open_id) tiktokConfig.openId = tokenObj.open_id;
+      tiktokConfig.expiresAt = Date.now() + (tokenObj.expires_in || 86400) * 1000;
+      return tokenObj.access_token;
+    }
+  } catch (_) {}
+  return tiktokConfig.accessToken || '';
+}
+
+// Helper: Download video from Google Drive / Cloud URL and upload binary via FILE_UPLOAD to TikTok
+async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title, deliveryMode = 'DIRECT', tiktokConfig = null }) {
+  let activeToken = (accessToken || tiktokConfig?.accessToken || '').trim();
+  if (tiktokConfig && tiktokConfig.refreshToken && (!activeToken || (tiktokConfig.expiresAt && Date.now() > tiktokConfig.expiresAt - 300000))) {
+    activeToken = await refreshTikTokAccessToken(tiktokConfig);
+  }
+  if (!activeToken) {
+    throw new Error('Falta conectar o autorizar tu Access Token de TikTok en la pestaña "Paso a Paso TikTok".');
+  }
+
+  const norm = normalizeCloudMediaServer(mediaUrl, 'video');
+  const directDownloadUrl = norm.publicUrl || (await resolveDirectMediaUrl(mediaUrl));
+
+  // 1. Descargar el binario MP4 desde Google Drive / Nube en memoria del servidor
+  const fileRes = await fetch(directDownloadUrl, {
+    method: 'GET',
+    redirect: 'follow',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  });
+  if (!fileRes.ok) {
+    throw new Error(`No se pudo descargar el video desde Google Drive/Nube (HTTP ${fileRes.status}). Verifica que el archivo tenga acceso "Cualquier persona con el enlace".`);
+  }
+
+  const arrayBuf = await fileRes.arrayBuffer();
+  const videoBuffer = Buffer.from(arrayBuf);
+  const videoSize = videoBuffer.length;
+
+  if (videoSize < 1000) {
+    throw new Error('El archivo descargado desde el enlace no parece ser un video MP4 válido (tamaño demasiado pequeño).');
+  }
+
+  // 2. Consultar creator_info para conocer los niveles de privacidad permitidos (en Sandbox usa SELF_ONLY; auditado usa PUBLIC_TO_EVERYONE)
+  let privacyLevel = 'SELF_ONLY';
+  try {
+    const creatorRes = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${activeToken}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      }
+    });
+    const creatorData = await creatorRes.json();
+    const options = creatorData.data?.privacy_level_options;
+    if (Array.isArray(options) && options.length > 0) {
+      if (options.includes('PUBLIC_TO_EVERYONE')) {
+        privacyLevel = 'PUBLIC_TO_EVERYONE';
+      } else {
+        privacyLevel = options[0];
+      }
+    }
+  } catch (_) {}
+
+  // 3. Inicializar subida FILE_UPLOAD en TikTok (no requiere verificar dominio de Google Drive)
+  const useInbox = deliveryMode === 'INBOX';
+  const initEndpoint = useInbox
+    ? 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/'
+    : 'https://open.tiktokapis.com/v2/post/publish/video/init/';
+
+  const initPayload = useInbox
+    ? {
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: videoSize,
+          chunk_size: videoSize,
+          total_chunk_count: 1
+        }
+      }
+    : {
+        post_info: {
+          title: (title || 'Publicación SHEEP 100').slice(0, 2200),
+          privacy_level: privacyLevel,
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false
+        },
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: videoSize,
+          chunk_size: videoSize,
+          total_chunk_count: 1
+        }
+      };
+
+  let initRes = await fetch(initEndpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${activeToken}`,
+      'Content-Type': 'application/json; charset=UTF-8'
+    },
+    body: JSON.stringify(initPayload)
+  });
+  let initData = await initRes.json();
+
+  // Si Direct Post falla por restricción de Sandbox/cuenta pública, respaldar automáticamente a Bandeja de Entrada (Inbox) de TikTok
+  let finalMode = useInbox ? 'INBOX' : 'DIRECT';
+  if ((!initRes.ok || (initData.error && initData.error.code && initData.error.code !== 'ok')) && !useInbox) {
+    const fallbackRes = await fetch('https://open.tiktokapis.com/v2/post/publish/inbox/video/init/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${activeToken}`,
+        'Content-Type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify({
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: videoSize,
+          chunk_size: videoSize,
+          total_chunk_count: 1
+        }
+      })
+    });
+    const fallbackData = await fallbackRes.json();
+    if (fallbackRes.ok && fallbackData.data?.upload_url) {
+      initRes = fallbackRes;
+      initData = fallbackData;
+      finalMode = 'INBOX';
+    }
+  }
+
+  const uploadUrl = initData?.data?.upload_url;
+  const publishId = initData?.data?.publish_id;
+  if (!uploadUrl) {
+    const errCode = initData?.error?.code || 'unknown_error';
+    const errMsg = initData?.error?.message || JSON.stringify(initData);
+    throw new Error(`TikTok rechazó inicializar el video (${errCode}): ${errMsg}`);
+  }
+
+  // 4. Transferir los bytes del MP4 vía PUT al upload_url de TikTok
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Length': String(videoSize),
+      'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`
+    },
+    body: videoBuffer
+  });
+
+  if (!putRes.ok && putRes.status !== 201 && putRes.status !== 206) {
+    const putErrText = await putRes.text().catch(() => '');
+    throw new Error(`Error subiendo binario MP4 a TikTok (HTTP ${putRes.status}): ${putErrText.slice(0, 180)}`);
+  }
+
+  const label =
+    finalMode === 'INBOX'
+      ? `🎵 Video enviado a tu Bandeja de Entrada de TikTok (ID: ${publishId} • Ábrelo en tu app de TikTok para publicar público)`
+      : `🎵 Video publicado en TikTok (${privacyLevel === 'SELF_ONLY' ? 'Modo Sandbox Privado' : 'Público'} • ID: ${publishId})`;
+
+  return {
+    success: true,
+    publishId,
+    privacyLevel,
+    deliveryMode: finalMode,
+    label
+  };
+}
+
 // TikTok OAuth token exchange helper (no CORS restrictions on server)
 app.post('/api/tiktok/exchange-code', async (req, res) => {
   const { client_key, client_secret, code, redirect_uri, code_verifier } = req.body || {};
@@ -102,19 +292,24 @@ app.post('/api/tiktok/exchange-code', async (req, res) => {
       body: bodyParams.toString()
     });
     const data = await ttRes.json();
+    const tokenObj = data.data || data;
 
-    // If exchange succeeded, save to db.json immediately
-    if (ttRes.ok && data.data?.access_token) {
+    if (ttRes.ok && tokenObj?.access_token) {
       try {
         const db = readDb();
-        db.tiktokConfig = db.tiktokConfig || {};
-        db.tiktokConfig.clientKey = client_key;
-        db.tiktokConfig.clientSecret = client_secret;
-        db.tiktokConfig.accessToken = data.data.access_token;
-        db.tiktokConfig.connected = true;
+        db.tiktokConfig = {
+          ...(db.tiktokConfig || {}),
+          clientKey: client_key,
+          clientSecret: client_secret,
+          accessToken: tokenObj.access_token,
+          refreshToken: tokenObj.refresh_token || '',
+          openId: tokenObj.open_id || '',
+          expiresAt: Date.now() + (tokenObj.expires_in || 86400) * 1000,
+          connected: true
+        };
         writeDb(db);
       } catch (saveErr) {
-        console.warn('Error guardando token en db.json:', saveErr);
+        console.warn('Error guardando token de TikTok en db.json:', saveErr);
       }
     }
 
@@ -124,62 +319,30 @@ app.post('/api/tiktok/exchange-code', async (req, res) => {
   }
 });
 
-// TikTok direct video publisher via server
+// TikTok direct video publisher via server (downloads from Google Drive & uploads via FILE_UPLOAD)
 app.post('/api/tiktok/publish-video', async (req, res) => {
-  const { accessToken, mediaUrl, title } = req.body || {};
-  if (!accessToken || !mediaUrl) {
-    return res.status(400).json({ error: 'Faltan parámetros requeridos (accessToken, mediaUrl)' });
+  const db = readDb();
+  const {
+    accessToken = db.tiktokConfig?.accessToken,
+    mediaUrl,
+    title,
+    deliveryMode = db.tiktokConfig?.deliveryMode || 'DIRECT'
+  } = req.body || {};
+
+  if (!mediaUrl) {
+    return res.status(400).json({ error: 'Falta mediaUrl del video para publicar en TikTok.' });
   }
   try {
-    const directUrl = await resolveDirectMediaUrl(mediaUrl);
-
-    // 1. Query creator info to determine allowed privacy levels (Sandbox requires SELF_ONLY)
-    let privacyLevel = 'SELF_ONLY';
-    try {
-      const creatorRes = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json; charset=UTF-8'
-        }
-      });
-      const creatorData = await creatorRes.json();
-      const options = creatorData.data?.privacy_level_options;
-      if (Array.isArray(options) && options.length > 0) {
-        if (options.includes('PUBLIC_TO_EVERYONE')) {
-          privacyLevel = 'PUBLIC_TO_EVERYONE';
-        } else {
-          privacyLevel = options[0];
-        }
-      }
-    } catch (_) {}
-
-    const publishPayload = {
-      post_info: {
-        title: title || 'Publicación SHEEP 100',
-        privacy_level: privacyLevel,
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false
-      },
-      source_info: {
-        source: 'PULL_FROM_URL',
-        video_url: directUrl
-      }
-    };
-
-    const ttRes = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json; charset=UTF-8'
-      },
-      body: JSON.stringify(publishPayload)
+    const result = await publishVideoToTikTokViaFileUpload({
+      accessToken,
+      mediaUrl,
+      title,
+      deliveryMode,
+      tiktokConfig: db.tiktokConfig
     });
-    const data = await ttRes.json();
-    return res.status(ttRes.status).json(data);
+    return res.json(result);
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Error publicando en TikTok API' });
+    return res.status(400).json({ error: err.message || 'Error publicando en TikTok API' });
   }
 });
 
@@ -860,6 +1023,22 @@ async function publishToMetaInstagram(post, metaConfig) {
       lastPublishId = fbRes.publishId || lastPublishId;
       messages.push(fbRes.label);
     }
+  }
+
+  // 3. PUBLICAR EN TIKTOK (Solo si el usuario seleccionó TikTok)
+  const wantTikTok = platforms.includes('tiktok');
+  if (wantTikTok) {
+    const db = readDb();
+    const ttCfg = post._tiktokConfig || db.tiktokConfig || {};
+    const ttRes = await publishVideoToTikTokViaFileUpload({
+      accessToken: ttCfg.accessToken,
+      mediaUrl,
+      title: post.caption || post.title || 'Publicación SHEEP 100',
+      deliveryMode: ttCfg.deliveryMode || 'DIRECT',
+      tiktokConfig: ttCfg
+    });
+    lastPublishId = ttRes.publishId || lastPublishId;
+    messages.push(ttRes.label);
   }
 
   return {
@@ -1636,23 +1815,67 @@ setInterval(async () => {
     });
 
     try {
-      const norm = normalizeCloudMediaServer(job.mediaUrl, 'video');
-      const result = await publishFacebookThreePhaseVideo({
-        fbPageId: job.fbPageId || '102786358439057',
-        pageToken: job.pageToken,
-        pageName: job.pageName || 'Facebook Page',
-        mediaUrl: norm.publicUrl || job.mediaUrl,
-        caption: job.caption || '',
-        mode: job.mode === 'REEL' ? 'REEL' : 'STORY'
-      });
+      let doneJob;
+      if (job.provider === 'TIKTOK_EXCHANGE') {
+        const bodyParams = new URLSearchParams({
+          client_key: job.client_key,
+          client_secret: job.client_secret,
+          code: job.code,
+          grant_type: 'authorization_code',
+          redirect_uri: job.redirect_uri
+        });
+        if (job.code_verifier) bodyParams.append('code_verifier', job.code_verifier);
+        const ttRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+        const ttData = await ttRes.json();
+        const tokenObj = ttData.data || ttData;
+        if (!ttRes.ok || !tokenObj?.access_token) {
+          throw new Error(ttData.error_description || ttData.error?.message || JSON.stringify(ttData));
+        }
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          accessToken: tokenObj.access_token,
+          refreshToken: tokenObj.refresh_token || '',
+          openId: tokenObj.open_id || '',
+          expiresIn: tokenObj.expires_in || 86400
+        };
+      } else if (job.provider === 'TIKTOK_PUBLISH') {
+        const ttResult = await publishVideoToTikTokViaFileUpload({
+          accessToken: job.accessToken,
+          mediaUrl: job.mediaUrl,
+          title: job.title || '',
+          deliveryMode: job.deliveryMode || 'DIRECT',
+          tiktokConfig: job.tiktokConfig || null
+        });
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          publishId: ttResult.publishId,
+          label: ttResult.label
+        };
+      } else {
+        const norm = normalizeCloudMediaServer(job.mediaUrl, 'video');
+        const result = await publishFacebookThreePhaseVideo({
+          fbPageId: job.fbPageId || '102786358439057',
+          pageToken: job.pageToken,
+          pageName: job.pageName || 'Facebook Page',
+          mediaUrl: norm.publicUrl || job.mediaUrl,
+          caption: job.caption || '',
+          mode: job.mode === 'REEL' ? 'REEL' : 'STORY'
+        });
 
-      const doneJob = {
-        jobId: job.jobId,
-        status: 'done',
-        fbPublishId: result.publishId,
-        videoId: result.videoId,
-        label: result.label
-      };
+        doneJob = {
+          jobId: job.jobId,
+          status: 'done',
+          fbPublishId: result.publishId,
+          videoId: result.videoId,
+          label: result.label
+        };
+      }
       await fetch(FIRESTORE_RELAY_URL, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

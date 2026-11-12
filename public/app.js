@@ -38,6 +38,16 @@ function getDefaultInitialState() {
         step5_accessToken: true
       }
     },
+    tiktokConfig: {
+      clientKey: 'sbawbyxlo8yktgrxxv',
+      clientSecret: '',
+      accessToken: '',
+      refreshToken: '',
+      openId: '',
+      username: 'cocuyo.grafic',
+      deliveryMode: 'DIRECT',
+      redirectUri: 'https://juznald-cyber.github.io/SHEEP-100/'
+    },
     hashtagGroups: [
       {
         id: 'hg-1',
@@ -210,7 +220,8 @@ const TAB_TITLES = {
   metrics: '📊 Centro de Métricas e Insights (Instagram & Facebook)',
   media: '🖼️ Biblioteca de Medios (Media Library)',
   ai: '✨ Estudio de IA para Copies & Guiones de Historias',
-  'meta-wizard': '🧭 Configuración Paso a Paso con Meta (Modo Desarrollo)'
+  'meta-wizard': '🧭 Configuración Paso a Paso con Meta (Modo Desarrollo)',
+  'tiktok-wizard': '🎵 Configuración Paso a Paso con TikTok (Sandbox & Subida desde Drive)'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -223,10 +234,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMediaUploadEvents();
   initAiStudioEvents();
   initMetaWizardEvents();
+  initTikTokWizardEvents();
   initMetricsEvents();
 
   await initFirebaseCloud();
   checkSavedSession();
+  checkTikTokOAuthCallback();
 
   setInterval(runBrowserAutoScheduler, 25000);
 });
@@ -281,7 +294,8 @@ function normalizeCloudMedia(rawUrl, type = 'image') {
 }
 
 function ensureSampleStoryExists() {
-  const defCfg = getDefaultInitialState().metaConfig;
+  const defState = getDefaultInitialState();
+  const defCfg = defState.metaConfig;
   appState.metaConfig = appState.metaConfig || {};
   if (!appState.metaConfig.igUserId) {
     appState.metaConfig.igUserId = defCfg.igUserId;
@@ -296,6 +310,21 @@ function ensureSampleStoryExists() {
   }
   if (!appState.metaConfig.accessToken) {
     appState.metaConfig.accessToken = defCfg.accessToken;
+  }
+
+  const defTk = defState.tiktokConfig;
+  appState.tiktokConfig = appState.tiktokConfig || {};
+  if (!appState.tiktokConfig.clientKey) {
+    appState.tiktokConfig.clientKey = defTk.clientKey;
+  }
+  if (!appState.tiktokConfig.username) {
+    appState.tiktokConfig.username = defTk.username;
+  }
+  if (!appState.tiktokConfig.deliveryMode) {
+    appState.tiktokConfig.deliveryMode = defTk.deliveryMode;
+  }
+  if (!appState.tiktokConfig.redirectUri) {
+    appState.tiktokConfig.redirectUri = defTk.redirectUri;
   }
 
   // Normalizar automáticamente enlaces de Google Drive / Dropbox en Media Library
@@ -467,6 +496,7 @@ function applyCloudPayload(data) {
     appState = {
       ...appState,
       metaConfig: parsed.metaConfig || appState.metaConfig,
+      tiktokConfig: parsed.tiktokConfig ? { ...(appState.tiktokConfig || {}), ...parsed.tiktokConfig } : appState.tiktokConfig,
       mediaLibrary: Array.isArray(parsed.mediaLibrary) ? parsed.mediaLibrary : appState.mediaLibrary,
       posts: Array.isArray(parsed.posts) ? parsed.posts : appState.posts,
       hashtagGroups: Array.isArray(parsed.hashtagGroups) ? parsed.hashtagGroups : appState.hashtagGroups
@@ -719,6 +749,7 @@ function renderAll() {
   renderMediaGallery();
   renderHashtagGroups();
   renderMetaWizardState();
+  renderTikTokWizardState();
   populateComposerMediaDropdown();
 }
 
@@ -1395,7 +1426,100 @@ async function executeInstagramSinglePublish(post, accessToken, igUserId, mediaU
   };
 }
 
-// Executes the official Meta Graph API flow for INSTAGRAM, FACEBOOK PAGE, or BOTH
+// Helper: Publish video MP4 from Google Drive or URL to TikTok via FILE_UPLOAD binary chunk transfer
+async function executeTikTokPublish(post, mediaUrl, isVideoFile) {
+  if (!isVideoFile) {
+    throw new Error('La API de TikTok Content Posting solo permite videos en formato MP4. Selecciona un video MP4.');
+  }
+  const tkCfg = appState.tiktokConfig || {};
+  const payload = {
+    accessToken: (tkCfg.accessToken || '').trim(),
+    mediaUrl,
+    title: post.caption || post.title || 'Publicado desde SHEEP 100 #sheep100',
+    deliveryMode: tkCfg.deliveryMode || 'DIRECT',
+    tiktokConfig: tkCfg
+  };
+
+  if (!payload.accessToken && !tkCfg.refreshToken) {
+    throw new Error(
+      'Falta tu Access Token de TikTok. Ve a la pestaña "🎵 Paso a Paso TikTok" y pulsa "🔗 1. Autorizar y Conectar con TikTok".'
+    );
+  }
+
+  const endpoints = ['/api/tiktok/publish-video', 'http://localhost:3000/api/tiktok/publish-video'];
+  let lastError = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) continue;
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Error publicando en TikTok');
+      }
+      if (data.refreshedAccessToken && data.refreshedAccessToken !== tkCfg.accessToken) {
+        appState.tiktokConfig.accessToken = data.refreshedAccessToken;
+      }
+      return data;
+    } catch (err) {
+      lastError = err;
+      if (err.message && !/Failed to fetch|NetworkError/i.test(err.message)) {
+        throw err;
+      }
+    }
+  }
+
+  // Fallback Cloud Relay via Firestore (when publishing from mobile or when localhost is not reachable)
+  const relayUrl =
+    'https://firestore.googleapis.com/v1/projects/sheep-100-b8a90/databases/(default)/documents/sheep100/fb_rupload_relay';
+  const jobId = `tk_pub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const jobPayload = {
+    jobId,
+    status: 'pending',
+    provider: 'TIKTOK_PUBLISH',
+    ...payload
+  };
+
+  await fetch(relayUrl, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        payload: { stringValue: JSON.stringify(jobPayload) },
+        savedAt: { stringValue: new Date().toISOString() }
+      }
+    })
+  });
+
+  for (let i = 0; i < 18; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const checkRes = await fetch(relayUrl);
+    if (!checkRes.ok) continue;
+    const checkDoc = await checkRes.json();
+    const rawStr = checkDoc?.fields?.payload?.stringValue;
+    if (!rawStr) continue;
+    const state = JSON.parse(rawStr);
+    if (state.jobId === jobId) {
+      if (state.status === 'done') {
+        if (state.refreshedAccessToken) {
+          appState.tiktokConfig.accessToken = state.refreshedAccessToken;
+        }
+        return state;
+      }
+      if (state.status === 'error') {
+        throw new Error(state.error || 'Error subiendo video MP4 a TikTok');
+      }
+    }
+  }
+
+  throw lastError || new Error('Tiempo de espera agotado al transferir video MP4 a TikTok');
+}
+
+// Executes the official Meta Graph API + TikTok Content Posting API v2 flow
 // Supports 4 distinct formats: 'STORY' (Solo Historia 24h), 'REEL' (Solo Reel), 'POST' (Solo Post), and 'BOTH' (Historia 24h + Reel/Post)
 async function executeMetaPublishFlow(post) {
   const cfg = appState.metaConfig || {};
@@ -1424,8 +1548,9 @@ async function executeMetaPublishFlow(post) {
   const platforms = Array.isArray(post.platforms) && post.platforms.length ? post.platforms : ['instagram'];
   const wantInstagram = platforms.includes('instagram');
   const wantFacebook = platforms.includes('facebook');
+  const wantTikTok = platforms.includes('tiktok');
 
-  if (!accessToken || (!igUserId && !cfg.fbPageId)) {
+  if ((wantInstagram || wantFacebook) && (!accessToken || (!igUserId && !cfg.fbPageId))) {
     if (cfg.simulationFallback !== false) {
       return {
         success: true,
@@ -1443,10 +1568,10 @@ async function executeMetaPublishFlow(post) {
         success: true,
         containerId: `LOCAL_${Date.now()}`,
         mediaPublishId: `READY_${Date.now()}`,
-        message: 'Marcado como listo (Nota de Meta API: para publicar directamente la foto/video requiere URL pública https://).'
+        message: 'Marcado como listo (Nota de API: para publicar directamente la foto/video requiere URL pública https:// o Google Drive).'
       };
     }
-    throw new Error('La API de Meta exige una URL pública https:// en formato JPG o MP4.');
+    throw new Error('Se requiere una URL pública https:// o enlace de Google Drive en formato JPG o MP4.');
   }
 
   const resultsMessages = [];
@@ -1477,6 +1602,13 @@ async function executeMetaPublishFlow(post) {
       lastPublishId = fbRes.fbPublishId || lastPublishId;
       resultsMessages.push(fbRes.label);
     }
+  }
+
+  // 3. PUBLICAR EN TIKTOK VÍA FILE_UPLOAD BINARIO DESDE GOOGLE DRIVE (Solo si el usuario seleccionó TikTok)
+  if (wantTikTok) {
+    const ttRes = await executeTikTokPublish(post, mediaUrl, isVideoFile);
+    lastPublishId = ttRes.publishId || lastPublishId;
+    resultsMessages.push(ttRes.label);
   }
 
   return {
@@ -2666,6 +2798,418 @@ function renderMetaStatusSidebar() {
     dot.classList.remove('connected');
     title.textContent = 'Modo Simulación / Pendiente';
     desc.textContent = 'Completa los 5 pasos de Meta para conectar tu Instagram Business.';
+  }
+
+  const tk = appState.tiktokConfig || {};
+  const tkDot = document.getElementById('tiktokStatusDot');
+  const tkTitle = document.getElementById('tiktokStatusTitle');
+  const tkBadge = document.getElementById('tiktokProgressBadge');
+  const tkBig = document.getElementById('tiktokStatusBadgeBig');
+
+  if (tk.accessToken) {
+    tkDot?.classList.add('connected');
+    if (tkTitle) tkTitle.textContent = `TikTok: @${(tk.username || 'cocuyo.grafic').replace(/^@/, '')} (Conectado)`;
+    if (tkBadge) tkBadge.textContent = 'Conectado • Drive Activo';
+    if (tkBig) tkBig.textContent = 'ACTIVO';
+  } else {
+    tkDot?.classList.remove('connected');
+    if (tkTitle) tkTitle.textContent = 'TikTok: Listo para autorizar';
+    if (tkBadge) tkBadge.textContent = 'Sandbox / Direct Post';
+    if (tkBig) tkBig.textContent = 'SANDBOX';
+  }
+}
+
+// ==========================================
+// TIKTOK SANDBOX OAUTH (PKCE S256) & CONFIG
+// ==========================================
+function generateTikTokCodeVerifier() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let result = '';
+  const randomValues = new Uint8Array(64);
+  if (window.crypto && window.crypto.getRandomValues) {
+    window.crypto.getRandomValues(randomValues);
+    for (let i = 0; i < 64; i++) {
+      result += chars[randomValues[i] % chars.length];
+    }
+  } else {
+    for (let i = 0; i < 64; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+  }
+  return result;
+}
+
+async function generateTikTokCodeChallenge(verifier) {
+  if (window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const hash = await window.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  return verifier;
+}
+
+async function exchangeTikTokCodeFlow({ code, clientKey, clientSecret, redirectUri, codeVerifier }) {
+  const payload = {
+    code: (code || '').trim(),
+    client_key: (clientKey || '').trim(),
+    client_secret: (clientSecret || '').trim(),
+    redirect_uri: (redirectUri || '').trim(),
+    code_verifier: (codeVerifier || '').trim()
+  };
+
+  const endpoints = ['/api/tiktok/exchange-code', 'http://localhost:3000/api/tiktok/exchange-code'];
+  let lastErr = null;
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) continue;
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Error canjeando código de TikTok');
+      }
+      if (data.accessToken) return data;
+    } catch (err) {
+      lastErr = err;
+      if (err.message && !/Failed to fetch|NetworkError/i.test(err.message)) {
+        throw err;
+      }
+    }
+  }
+
+  // Fallback Cloud Relay via Firestore
+  const relayUrl =
+    'https://firestore.googleapis.com/v1/projects/sheep-100-b8a90/databases/(default)/documents/sheep100/fb_rupload_relay';
+  const jobId = `tk_oauth_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const jobPayload = {
+    jobId,
+    status: 'pending',
+    provider: 'TIKTOK_EXCHANGE',
+    clientKey: payload.client_key,
+    clientSecret: payload.client_secret,
+    code: payload.code,
+    redirectUri: payload.redirect_uri,
+    codeVerifier: payload.code_verifier
+  };
+
+  await fetch(relayUrl, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fields: {
+        payload: { stringValue: JSON.stringify(jobPayload) },
+        savedAt: { stringValue: new Date().toISOString() }
+      }
+    })
+  });
+
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const checkRes = await fetch(relayUrl);
+    if (!checkRes.ok) continue;
+    const checkDoc = await checkRes.json();
+    const rawStr = checkDoc?.fields?.payload?.stringValue;
+    if (!rawStr) continue;
+    const state = JSON.parse(rawStr);
+    if (state.jobId === jobId) {
+      if (state.status === 'done' && state.accessToken) {
+        return state;
+      }
+      if (state.status === 'error') {
+        throw new Error(state.error || 'Error canjeando código en TikTok');
+      }
+    }
+  }
+
+  throw lastErr || new Error('No se pudo conectar con el servidor para canjear el código de TikTok.');
+}
+
+function extractTikTokCodeFromInput(rawInput) {
+  const str = (rawInput || '').trim();
+  if (!str) return '';
+  if (str.includes('code=')) {
+    try {
+      const u = new URL(str);
+      const c = u.searchParams.get('code');
+      if (c) return decodeURIComponent(c);
+    } catch (_) {
+      const m = str.match(/[?&]code=([^&#\s]+)/i);
+      if (m) return decodeURIComponent(m[1]);
+    }
+  }
+  return str;
+}
+
+function initTikTokWizardEvents() {
+  const btnOAuth = document.getElementById('btnTikTokOAuthConnect');
+  const btnManualExchange = document.getElementById('btnTikTokExchangeCodeNow');
+  const formTikTok = document.getElementById('formTikTokConfig');
+
+  btnOAuth?.addEventListener('click', async () => {
+    const clientKey = (document.getElementById('cfgTikTokClientKey')?.value || 'sbawbyxlo8yktgrxxv').trim();
+    const clientSecret = (document.getElementById('cfgTikTokClientSecret')?.value || '').trim();
+    const username = (document.getElementById('cfgTikTokUsername')?.value || 'cocuyo.grafic').trim();
+    const deliveryMode = document.getElementById('cfgTikTokDeliveryMode')?.value || 'DIRECT';
+    const redirectUri = (
+      document.getElementById('cfgTikTokRedirectUri')?.value || 'https://juznald-cyber.github.io/SHEEP-100/'
+    ).trim();
+
+    if (!clientKey) {
+      showToast('⚠️ Ingresa tu Client Key de TikTok Sandbox.');
+      return;
+    }
+    if (!clientSecret) {
+      showToast('⚠️ Ingresa tu Client Secret de TikTok Sandbox antes de autorizar para que el canje sea automático.');
+      document.getElementById('cfgTikTokClientSecret')?.focus();
+      return;
+    }
+
+    const codeVerifier = generateTikTokCodeVerifier();
+    sessionStorage.setItem('tiktok_code_verifier', codeVerifier);
+    localStorage.setItem('tiktok_code_verifier', codeVerifier);
+
+    const codeChallenge = await generateTikTokCodeChallenge(codeVerifier);
+
+    appState.tiktokConfig = {
+      ...(appState.tiktokConfig || {}),
+      clientKey,
+      clientSecret,
+      username,
+      deliveryMode,
+      redirectUri,
+      codeVerifier
+    };
+    await saveStateEverywhere(false);
+
+    const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
+      clientKey
+    )}&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&state=sheep100&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`;
+
+    showToast('🎵 Redirigiendo a TikTok para autorizar tu cuenta...');
+    window.location.assign(authUrl);
+  });
+
+  btnManualExchange?.addEventListener('click', async () => {
+    const rawCodeInput = document.getElementById('cfgTikTokManualCodeUrl')?.value || '';
+    const code = extractTikTokCodeFromInput(rawCodeInput);
+    const feedback = document.getElementById('tiktokVerifyFeedback');
+
+    if (!code) {
+      showToast('⚠️ Pega la URL con ?code=... o el código de autorización de TikTok.');
+      return;
+    }
+
+    const tk = appState.tiktokConfig || {};
+    const clientKey = (document.getElementById('cfgTikTokClientKey')?.value || tk.clientKey || 'sbawbyxlo8yktgrxxv').trim();
+    const clientSecret = (document.getElementById('cfgTikTokClientSecret')?.value || tk.clientSecret || '').trim();
+    const redirectUri = (
+      document.getElementById('cfgTikTokRedirectUri')?.value ||
+      tk.redirectUri ||
+      'https://juznald-cyber.github.io/SHEEP-100/'
+    ).trim();
+    const codeVerifier =
+      tk.codeVerifier ||
+      sessionStorage.getItem('tiktok_code_verifier') ||
+      localStorage.getItem('tiktok_code_verifier') ||
+      '';
+
+    if (!clientSecret) {
+      showToast('⚠️ Ingresa tu Client Secret de TikTok para poder canjear el código.');
+      return;
+    }
+
+    if (feedback) {
+      feedback.classList.remove('hidden', 'ok', 'err');
+      feedback.textContent = '⏳ Canjeando código de autorización con TikTok OAuth v2...';
+    }
+
+    try {
+      const tokenData = await exchangeTikTokCodeFlow({
+        code,
+        clientKey,
+        clientSecret,
+        redirectUri,
+        codeVerifier
+      });
+
+      appState.tiktokConfig = {
+        ...(appState.tiktokConfig || {}),
+        clientKey,
+        clientSecret,
+        redirectUri,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken || appState.tiktokConfig?.refreshToken || '',
+        openId: tokenData.openId || appState.tiktokConfig?.openId || '',
+        tokenUpdatedAt: new Date().toISOString()
+      };
+
+      if (feedback) {
+        feedback.classList.add('ok');
+        feedback.innerHTML = `✅ <strong>¡TikTok Conectado Exitosamente!</strong> Access Token (<code>${escapeHtml(
+          tokenData.accessToken.slice(0, 14)
+        )}...</code>) y Refresh Token (365 días) guardados en Firebase Cloud. Ya puedes publicar o programar videos desde Google Drive.`;
+      }
+
+      renderAll();
+      await saveStateEverywhere(true);
+      showToast('🎉 ¡TikTok conectado y sincronizado en la nube!');
+    } catch (err) {
+      if (feedback) {
+        feedback.classList.add('err');
+        feedback.textContent = `❌ Error canjeando código de TikTok: ${err.message}`;
+      }
+      showToast(`❌ ${err.message}`);
+    }
+  });
+
+  formTikTok?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    appState.tiktokConfig = {
+      ...(appState.tiktokConfig || {}),
+      clientKey: (document.getElementById('cfgTikTokClientKey')?.value || 'sbawbyxlo8yktgrxxv').trim(),
+      clientSecret: (document.getElementById('cfgTikTokClientSecret')?.value || '').trim(),
+      username: (document.getElementById('cfgTikTokUsername')?.value || 'cocuyo.grafic').trim(),
+      deliveryMode: document.getElementById('cfgTikTokDeliveryMode')?.value || 'DIRECT',
+      redirectUri: (document.getElementById('cfgTikTokRedirectUri')?.value || 'https://juznald-cyber.github.io/SHEEP-100/').trim(),
+      accessToken: (document.getElementById('cfgTikTokAccessToken')?.value || '').trim(),
+      refreshToken: (document.getElementById('cfgTikTokRefreshToken')?.value || '').trim(),
+      openId: (document.getElementById('cfgTikTokOpenId')?.value || '').trim()
+    };
+
+    const feedback = document.getElementById('tiktokVerifyFeedback');
+    if (feedback && appState.tiktokConfig.accessToken) {
+      feedback.classList.remove('hidden', 'err');
+      feedback.classList.add('ok');
+      feedback.innerHTML = `✅ <strong>Configuración de TikTok guardada y sincronizada en Firebase Cloud.</strong> Modo: <b>${escapeHtml(
+        appState.tiktokConfig.deliveryMode
+      )}</b> • Cuenta: <b>@${escapeHtml(appState.tiktokConfig.username.replace(/^@/, ''))}</b>.`;
+    }
+
+    renderAll();
+    await saveStateEverywhere(true);
+    showToast('🎵 Configuración de TikTok guardada en Nube y Local');
+  });
+}
+
+async function checkTikTokOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const errParam = params.get('error');
+  if (!code && !errParam) return;
+
+  // Clean query params from address bar
+  const cleanUrl = window.location.origin + window.location.pathname;
+  window.history.replaceState({}, document.title, cleanUrl);
+
+  switchTab('tiktok-wizard');
+  const feedback = document.getElementById('tiktokVerifyFeedback');
+
+  if (errParam) {
+    const errDesc = params.get('error_description') || errParam;
+    if (feedback) {
+      feedback.classList.remove('hidden', 'ok');
+      feedback.classList.add('err');
+      feedback.textContent = `❌ TikTok devolvió un error en la autorización: ${errDesc}`;
+    }
+    showToast(`❌ TikTok OAuth: ${errDesc}`);
+    return;
+  }
+
+  const tk = appState.tiktokConfig || {};
+  const clientKey = (tk.clientKey || 'sbawbyxlo8yktgrxxv').trim();
+  const clientSecret = (tk.clientSecret || '').trim();
+  const redirectUri = (tk.redirectUri || cleanUrl).trim();
+  const codeVerifier =
+    tk.codeVerifier ||
+    sessionStorage.getItem('tiktok_code_verifier') ||
+    localStorage.getItem('tiktok_code_verifier') ||
+    '';
+
+  const manualInput = document.getElementById('cfgTikTokManualCodeUrl');
+  if (manualInput) manualInput.value = code;
+
+  if (!clientSecret) {
+    if (feedback) {
+      feedback.classList.remove('hidden', 'ok');
+      feedback.classList.add('err');
+      feedback.innerHTML = `⚠️ <strong>Código recibido de TikTok:</strong> Pega tu <b>Client Secret</b> arriba y haz clic en <b>"⚡ Canjear Código"</b>.`;
+    }
+    showToast('🎵 Código recibido de TikTok. Ingresa tu Client Secret y pulsa "Canjear Código".');
+    return;
+  }
+
+  if (feedback) {
+    feedback.classList.remove('hidden', 'ok', 'err');
+    feedback.textContent = '⏳ Código recibido de TikTok. Canjeando automáticamente por tu Access Token...';
+  }
+
+  try {
+    const tokenData = await exchangeTikTokCodeFlow({
+      code,
+      clientKey,
+      clientSecret,
+      redirectUri,
+      codeVerifier
+    });
+
+    appState.tiktokConfig = {
+      ...(appState.tiktokConfig || {}),
+      clientKey,
+      clientSecret,
+      redirectUri,
+      accessToken: tokenData.accessToken,
+      refreshToken: tokenData.refreshToken || appState.tiktokConfig?.refreshToken || '',
+      openId: tokenData.openId || appState.tiktokConfig?.openId || '',
+      tokenUpdatedAt: new Date().toISOString()
+    };
+
+    if (feedback) {
+      feedback.classList.add('ok');
+      feedback.innerHTML = `🎉 <strong>¡TikTok Conectado Automáticamente!</strong> Access Token y Refresh Token (365 días) activos y sincronizados en Firebase Cloud.`;
+    }
+
+    renderAll();
+    await saveStateEverywhere(true);
+    showToast('🎉 ¡TikTok conectado y listo para publicar videos desde Google Drive!');
+  } catch (err) {
+    if (feedback) {
+      feedback.classList.add('err');
+      feedback.textContent = `❌ Error canjeando código automáticamente: ${err.message}`;
+    }
+    showToast(`❌ ${err.message}`);
+  }
+}
+
+function renderTikTokWizardState() {
+  const tk = appState.tiktokConfig || {};
+  const setValIfIdle = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val || '';
+  };
+
+  setValIfIdle('cfgTikTokClientKey', tk.clientKey || 'sbawbyxlo8yktgrxxv');
+  setValIfIdle('cfgTikTokClientSecret', tk.clientSecret || '');
+  setValIfIdle('cfgTikTokUsername', tk.username || 'cocuyo.grafic');
+  setValIfIdle('cfgTikTokAccessToken', tk.accessToken || '');
+  setValIfIdle('cfgTikTokRefreshToken', tk.refreshToken || '');
+  setValIfIdle('cfgTikTokOpenId', tk.openId || '');
+
+  const delivEl = document.getElementById('cfgTikTokDeliveryMode');
+  if (delivEl && document.activeElement !== delivEl) {
+    delivEl.value = tk.deliveryMode || 'DIRECT';
+  }
+  const redirEl = document.getElementById('cfgTikTokRedirectUri');
+  if (redirEl && document.activeElement !== redirEl && tk.redirectUri) {
+    redirEl.value = tk.redirectUri;
   }
 }
 
