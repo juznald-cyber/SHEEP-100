@@ -1477,10 +1477,69 @@ Devuelve el resultado en formato JSON con las claves:
 // ==========================================
 let isSchedulerRunning = false;
 
+const FIRESTORE_PRINCIPAL_URL =
+  'https://firestore.googleapis.com/v1/projects/sheep-100-b8a90/databases/(default)/documents/sheep100/principal';
+
 setInterval(async () => {
   if (isSchedulerRunning) return;
   isSchedulerRunning = true;
   try {
+    // 1. Sincronizar y verificar cola directamente en Firebase Cloud Firestore (sheep100/principal)
+    try {
+      const fsRes = await fetch(FIRESTORE_PRINCIPAL_URL);
+      if (fsRes.ok) {
+        const fsDoc = await fsRes.json();
+        const rawStr = fsDoc?.fields?.payload?.stringValue;
+        if (rawStr) {
+          const cloudState = JSON.parse(rawStr);
+          if (cloudState.metaConfig?.autoPublishEnabled !== false && Array.isArray(cloudState.posts)) {
+            const now = new Date();
+            const dueCloud = cloudState.posts.filter(
+              (p) => p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= now
+            );
+            if (dueCloud.length > 0) {
+              for (const post of dueCloud) {
+                try {
+                  const result = await publishToMetaInstagram(post, cloudState.metaConfig);
+                  post.status = 'published';
+                  post.publishedAt = new Date().toISOString();
+                  post.metaContainerId = result.containerId;
+                  post.metaPublishId = result.mediaPublishId;
+                  post.logs = post.logs || [];
+                  post.logs.push({
+                    time: new Date().toISOString(),
+                    message: `[Auto-Cloud ☁️] ${result.message}`
+                  });
+                } catch (err) {
+                  post.status = 'failed';
+                  post.logs = post.logs || [];
+                  post.logs.push({
+                    time: new Date().toISOString(),
+                    message: `[Auto-Cloud Error ☁️] ${err.message}`
+                  });
+                }
+              }
+              await fetch(FIRESTORE_PRINCIPAL_URL, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  fields: {
+                    payload: { stringValue: JSON.stringify(cloudState) },
+                    savedAt: { stringValue: new Date().toISOString() },
+                    updatedBy: { stringValue: `server_scheduler_${Date.now()}` }
+                  }
+                })
+              });
+              writeDb(cloudState);
+              isSchedulerRunning = false;
+              return;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2. Respaldo en db.json local
     const db = readDb();
     if (!db.metaConfig?.autoPublishEnabled) {
       isSchedulerRunning = false;
