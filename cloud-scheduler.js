@@ -342,7 +342,6 @@ async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title,
     throw new Error('El archivo descargado es demasiado pequeño o no es un video MP4 válido.');
   }
 
-  let privacyLevel = 'SELF_ONLY';
   const queryCreatorInfo = async (tok) => {
     const ciRes = await fetch('https://open.tiktokapis.com/v2/post/publish/creator_info/query/', {
       method: 'POST',
@@ -361,21 +360,17 @@ async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title,
     ci = await queryCreatorInfo(token);
   }
 
-  const options = ci.data?.data?.privacy_level_options;
-  if (Array.isArray(options) && options.length > 0) {
-    if (options.includes('SELF_ONLY')) {
-      privacyLevel = 'SELF_ONLY';
-    } else {
-      privacyLevel = options[0];
-    }
-  }
+  const privacyOptions =
+    Array.isArray(ci.data?.data?.privacy_level_options) && ci.data.data.privacy_level_options.length > 0
+      ? ci.data.data.privacy_level_options
+      : ['SELF_ONLY'];
 
   const chunkSize = videoSize;
   const totalChunkCount = 1;
   const safeTitle = (title || 'Publicado desde SHEEP 100 #sheep100').slice(0, 2100);
   const wantInbox = deliveryMode === 'INBOX';
 
-  const callInitEndpoint = async (useInbox) => {
+  const callInitEndpoint = async (useInbox, privLevel = 'SELF_ONLY') => {
     const endpoint = useInbox
       ? 'https://open.tiktokapis.com/v2/post/publish/inbox/video/init/'
       : 'https://open.tiktokapis.com/v2/post/publish/video/init/';
@@ -392,7 +387,7 @@ async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title,
       : {
           post_info: {
             title: safeTitle,
-            privacy_level: privacyLevel,
+            privacy_level: privLevel,
             disable_duet: false,
             disable_comment: false,
             disable_stitch: false
@@ -414,31 +409,38 @@ async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title,
       body: JSON.stringify(bodyObj)
     });
     const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data, usedInbox: useInbox };
+    return { ok: res.ok, status: res.status, data, usedInbox: useInbox, privacyLevel: privLevel };
   };
 
-  let initResult = await callInitEndpoint(wantInbox);
-  if (
-    (!initResult.ok || (initResult.data?.error?.code && initResult.data.error.code !== 'ok')) &&
-    !wantInbox
-  ) {
-    const fallbackInbox = await callInitEndpoint(true);
-    if (fallbackInbox.ok && (!fallbackInbox.data?.error?.code || fallbackInbox.data.error.code === 'ok')) {
-      initResult = fallbackInbox;
+  let initResult = null;
+  if (wantInbox) {
+    initResult = await callInitEndpoint(true, 'SELF_ONLY');
+  } else {
+    const order = privacyOptions.includes('PUBLIC_TO_EVERYONE')
+      ? ['PUBLIC_TO_EVERYONE', 'SELF_ONLY']
+      : ['SELF_ONLY'];
+    for (const priv of order) {
+      const attempt = await callInitEndpoint(false, priv);
+      initResult = attempt;
+      if (attempt.ok && attempt.data?.data?.upload_url) break;
+    }
+    if (!initResult?.ok || !initResult?.data?.data?.upload_url) {
+      const fallbackInbox = await callInitEndpoint(true, 'SELF_ONLY');
+      if (fallbackInbox.ok && fallbackInbox.data?.data?.upload_url) {
+        initResult = fallbackInbox;
+      }
     }
   }
 
-  const errCode = initResult.data?.error?.code;
-  if (!initResult.ok || (errCode && errCode !== 'ok')) {
-    const errMsg = initResult.data?.error?.message || `Error HTTP ${initResult.status}`;
-    throw new Error(`TikTok API (${errCode || initResult.status}): ${errMsg}`);
+  const errCode = initResult?.data?.error?.code;
+  if (!initResult?.ok || (errCode && errCode !== 'ok') || !initResult?.data?.data?.upload_url) {
+    const errMsg = initResult?.data?.error?.message || `Error HTTP ${initResult?.status}`;
+    throw new Error(`TikTok API (${errCode || initResult?.status}): ${errMsg}`);
   }
 
-  const publishId = initResult.data?.data?.publish_id;
-  const uploadUrl = initResult.data?.data?.upload_url;
-  if (!uploadUrl) {
-    throw new Error('TikTok no devolvió upload_url al inicializar FILE_UPLOAD.');
-  }
+  const publishId = initResult.data.data.publish_id;
+  const uploadUrl = initResult.data.data.upload_url;
+  const privacyLevel = initResult.privacyLevel || 'SELF_ONLY';
 
   const putRes = await fetch(uploadUrl, {
     method: 'PUT',
@@ -457,7 +459,7 @@ async function publishVideoToTikTokViaFileUpload({ accessToken, mediaUrl, title,
 
   const label = initResult.usedInbox
     ? `🎵 Video enviado a la Bandeja de TikTok (@${tiktokConfig?.username || 'TikTok'} • ID: ${publishId})`
-    : `🎵 Video publicado en TikTok (@${tiktokConfig?.username || 'TikTok'} • Modo: ${privacyLevel} • ID: ${publishId})`;
+    : `🎵 Video publicado en TikTok (@${tiktokConfig?.username || 'TikTok'} • Modo: ${privacyLevel === 'SELF_ONLY' ? 'Sandbox Privado' : 'Público'} • ID: ${publishId})`;
 
   return {
     publishId,
@@ -611,14 +613,15 @@ async function processRelayJobIfAny() {
 
       if (job.provider === 'TIKTOK_EXCHANGE') {
         const params = new URLSearchParams({
-          client_key: (job.clientKey || '').trim(),
-          client_secret: (job.clientSecret || '').trim(),
+          client_key: (job.clientKey || job.client_key || '').trim(),
+          client_secret: (job.clientSecret || job.client_secret || '').trim(),
           code: (job.code || '').trim(),
           grant_type: 'authorization_code',
-          redirect_uri: (job.redirectUri || '').trim()
+          redirect_uri: (job.redirectUri || job.redirect_uri || '').trim()
         });
-        if (job.codeVerifier) {
-          params.append('code_verifier', job.codeVerifier.trim());
+        const cv = (job.codeVerifier || job.code_verifier || '').trim();
+        if (cv) {
+          params.append('code_verifier', cv);
         }
         const tkRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
           method: 'POST',
@@ -626,17 +629,18 @@ async function processRelayJobIfAny() {
           body: params.toString()
         });
         const tkData = await tkRes.json();
-        if (!tkRes.ok || tkData.error || !tkData.access_token) {
-          throw new Error(tkData.error_description || tkData.error || 'Error canjeando código OAuth de TikTok');
+        const tok = tkData.data || tkData;
+        if (!tkRes.ok || tkData.error || !tok?.access_token) {
+          throw new Error(tkData.error_description || tkData.error?.message || tkData.error || 'Error canjeando código OAuth de TikTok');
         }
         doneJob = {
           jobId: job.jobId,
           status: 'done',
-          accessToken: tkData.access_token,
-          refreshToken: tkData.refresh_token || '',
-          openId: tkData.open_id || '',
-          scope: tkData.scope || '',
-          expiresIn: tkData.expires_in || 86400
+          accessToken: tok.access_token,
+          refreshToken: tok.refresh_token || '',
+          openId: tok.open_id || '',
+          scope: tok.scope || '',
+          expiresIn: tok.expires_in || 86400
         };
       } else if (job.provider === 'TIKTOK_PUBLISH') {
         const ttResult = await publishVideoToTikTokViaFileUpload({

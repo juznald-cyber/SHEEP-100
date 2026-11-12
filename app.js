@@ -493,10 +493,30 @@ function applyCloudPayload(data) {
       cloud.applyingRemote = false;
       return false;
     }
+    const pickNonEmpty = (a, b) => (a && String(a).trim() !== '' ? a : b);
+    const prevMeta = appState.metaConfig || {};
+    const incMeta = parsed.metaConfig || {};
+    const prevTk = appState.tiktokConfig || {};
+    const incTk = parsed.tiktokConfig || {};
+
     appState = {
       ...appState,
-      metaConfig: parsed.metaConfig || appState.metaConfig,
-      tiktokConfig: parsed.tiktokConfig ? { ...(appState.tiktokConfig || {}), ...parsed.tiktokConfig } : appState.tiktokConfig,
+      metaConfig: {
+        ...prevMeta,
+        ...incMeta,
+        accessToken: pickNonEmpty(incMeta.accessToken, prevMeta.accessToken || ''),
+        appSecret: pickNonEmpty(incMeta.appSecret, prevMeta.appSecret || ''),
+        fbPageAccessToken: pickNonEmpty(incMeta.fbPageAccessToken, prevMeta.fbPageAccessToken || '')
+      },
+      tiktokConfig: {
+        ...prevTk,
+        ...incTk,
+        clientKey: pickNonEmpty(incTk.clientKey, prevTk.clientKey || ''),
+        clientSecret: pickNonEmpty(incTk.clientSecret, prevTk.clientSecret || ''),
+        accessToken: pickNonEmpty(incTk.accessToken, prevTk.accessToken || ''),
+        refreshToken: pickNonEmpty(incTk.refreshToken, prevTk.refreshToken || ''),
+        openId: pickNonEmpty(incTk.openId, prevTk.openId || '')
+      },
       mediaLibrary: Array.isArray(parsed.mediaLibrary) ? parsed.mediaLibrary : appState.mediaLibrary,
       posts: Array.isArray(parsed.posts) ? parsed.posts : appState.posts,
       hashtagGroups: Array.isArray(parsed.hashtagGroups) ? parsed.hashtagGroups : appState.hashtagGroups
@@ -2873,9 +2893,17 @@ async function exchangeTikTokCodeFlow({ code, clientKey, clientSecret, redirectU
       if (!ct.includes('application/json')) continue;
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'Error canjeando código de TikTok');
+        throw new Error(data.error_description || data.error?.message || data.error || 'Error canjeando código de TikTok');
       }
-      if (data.accessToken) return data;
+      const normAccess = data.accessToken || data.access_token || data.data?.access_token;
+      if (normAccess) {
+        return {
+          accessToken: normAccess,
+          refreshToken: data.refreshToken || data.refresh_token || data.data?.refresh_token || '',
+          openId: data.openId || data.open_id || data.data?.open_id || '',
+          expiresIn: data.expiresIn || data.expires_in || data.data?.expires_in || 86400
+        };
+      }
     } catch (err) {
       lastErr = err;
       if (err.message && !/Failed to fetch|NetworkError/i.test(err.message)) {
@@ -3210,6 +3238,15 @@ function renderTikTokWizardState() {
   const redirEl = document.getElementById('cfgTikTokRedirectUri');
   if (redirEl && document.activeElement !== redirEl && tk.redirectUri) {
     redirEl.value = tk.redirectUri;
+  }
+
+  const fb = document.getElementById('tiktokVerifyFeedback');
+  if (fb && tk.accessToken && !fb.classList.contains('err')) {
+    fb.classList.remove('hidden', 'err');
+    fb.classList.add('ok');
+    fb.innerHTML = `✅ <strong>¡TikTok Conectado y Sincronizado en la Nube!</strong> Cuenta: <b>@${escapeHtml(
+      (tk.username || 'cocuyo.grafic').replace(/^@/, '')
+    )}</b> • Refresh Token (365 días) activo para publicar videos desde <b>Google Drive</b> incluso con tu PC apagado.`;
   }
 }
 
