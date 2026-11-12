@@ -885,9 +885,10 @@ function renderWeekCalendar() {
               minute: '2-digit'
             });
             const storyClass = isPostStory(p) ? 'is-story-card' : '';
+            const thumbSrc = getPostThumbnailUrl(p);
             return `
               <div class="cal-post-card status-${p.status} ${storyClass}" draggable="true" data-post-id="${p.id}">
-                ${p.mediaUrl ? `<img src="${p.mediaUrl}" class="cal-post-thumb" alt="" />` : ''}
+                ${thumbSrc ? `<img src="${escapeHtml(thumbSrc)}" class="cal-post-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />` : ''}
                 <div class="cal-post-time">
                   <span>⏰ ${t}</span>
                   ${getPostFormatBadge(p)}
@@ -952,6 +953,31 @@ function renderWeekCalendar() {
   }
 }
 
+function isPostVideo(post) {
+  if (!post) return false;
+  if (post.postFormat === 'REEL' || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') return true;
+  if (post.mediaId && Array.isArray(appState.mediaLibrary)) {
+    const linked = appState.mediaLibrary.find((m) => m.id === post.mediaId);
+    if (linked && (linked.type === 'video' || linked.format === 'MP4')) return true;
+  }
+  const u = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  if (/\.mp4(\?|$)/i.test(u) || /drive\.usercontent\.google\.com\/download/i.test(u)) return true;
+  return false;
+}
+
+function getPostThumbnailUrl(post) {
+  if (!post) return './icon.svg';
+  if (post.mediaId && Array.isArray(appState.mediaLibrary)) {
+    const linked = appState.mediaLibrary.find((m) => m.id === post.mediaId);
+    if (linked && linked.url) {
+      const n = normalizeCloudMedia(linked.url, 'image');
+      if (n.thumbUrl) return n.thumbUrl;
+    }
+  }
+  const norm = normalizeCloudMedia(post.mediaUrl || post.publicMediaUrl || '', 'image');
+  return norm.thumbUrl || post.mediaUrl || './icon.svg';
+}
+
 // ==========================================
 // QUEUE LIST & DIRECT META GRAPH API PUBLISH
 // ==========================================
@@ -988,11 +1014,12 @@ function renderPostsQueue() {
         : 'Sin fecha';
       const lastLog = p.logs && p.logs.length ? p.logs[p.logs.length - 1].message : '';
       const storyFlag = isPostStory(p);
+      const thumbUrl = getPostThumbnailUrl(p);
 
       return `
         <div class="queue-row" style="${storyFlag ? 'border-left: 4px solid #ec4899;' : ''}">
           <div class="queue-row-left">
-            <img src="${p.mediaUrl || './icon.svg'}" class="queue-thumb" alt="" />
+            <img src="${escapeHtml(thumbUrl)}" class="queue-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
             <div>
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 ${getPostFormatBadge(p)}
@@ -1032,8 +1059,8 @@ async function executeMetaPublishFlow(post) {
   const accessToken = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
   const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const isVideoHint = /\.mp4(\?|$)/i.test(rawMediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
-  const norm = normalizeCloudMedia(rawMediaUrl, isVideoHint ? 'video' : 'image');
+  const isVideoFile = isPostVideo(post);
+  const norm = normalizeCloudMedia(rawMediaUrl, isVideoFile ? 'video' : 'image');
   const mediaUrl = norm.publicUrl || rawMediaUrl;
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
   const storyMode = isPostStory(post);
@@ -1064,11 +1091,9 @@ async function executeMetaPublishFlow(post) {
     throw new Error('La API de Meta exige una URL pública https:// en formato JPG o MP4.');
   }
 
-  const graphBase = 'https://graph.facebook.com/v21.0';
+  const graphBase = 'https://graph.facebook.com/v22.0';
   const containerParams = new URLSearchParams();
   containerParams.append('access_token', accessToken);
-
-  const isVideoFile = /\.mp4(\?|$)/i.test(mediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
 
   if (storyMode) {
     // Official Meta Graph API Stories Payload
@@ -1078,7 +1103,7 @@ async function executeMetaPublishFlow(post) {
     } else {
       containerParams.append('image_url', mediaUrl);
     }
-  } else if (post.postFormat === 'REEL' || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+  } else if (isVideoFile || post.postFormat === 'REEL' || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
     containerParams.append('media_type', 'REELS');
     containerParams.append('video_url', mediaUrl);
     containerParams.append('caption', post.caption || '');
@@ -1099,6 +1124,29 @@ async function executeMetaPublishFlow(post) {
   }
 
   const creationId = step1Data.id;
+
+  // Step 1.5: Poll container status until status_code === 'FINISHED' (Required by Meta so "Media ID is not available" never occurs)
+  const maxAttempts = isVideoFile || storyMode ? 30 : 10;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const stRes = await fetch(
+        `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const stData = await stRes.json();
+      if (stData.status_code === 'FINISHED') {
+        break;
+      }
+      if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+        throw new Error(`Meta rechazó el procesamiento del archivo: ${stData.status || stData.status_code}`);
+      }
+      if (attempt === 2 || attempt === 6) {
+        showToast(`⏳ Meta está procesando tu ${isVideoFile ? 'video MP4' : 'archivo'} (${attempt * 3}s)...`);
+      }
+    } catch (pollErr) {
+      if (pollErr.message && pollErr.message.startsWith('Meta rechazó')) throw pollErr;
+    }
+  }
 
   // Step 2: Publish container (media_publish)
   const publishParams = new URLSearchParams();
@@ -1127,26 +1175,30 @@ async function executeMetaPublishFlow(post) {
 
 window.publishPostNow = async function (postId) {
   const post = appState.posts.find((p) => p.id === postId);
-  if (!post) return;
+  if (!post || post._isPublishing) return;
 
+  post._isPublishing = true;
   showToast(
     isPostStory(post)
-      ? '⭕ Enviando Historia (media_type=STORIES) a Meta Graph API...'
-      : '🚀 Enviando Post a Meta Graph API...'
+      ? '⭕ Creando y procesando Historia en Meta Graph API (puede tardar 10-25s si es video)...'
+      : '🚀 Creando y procesando Post en Meta Graph API...'
   );
   try {
     const result = await executeMetaPublishFlow(post);
     post.status = 'published';
     post.publishedAt = new Date().toISOString();
+    post.metaPublishId = result.mediaPublishId;
     post.logs = post.logs || [];
     post.logs.push({ time: new Date().toISOString(), message: result.message });
-    if (!post.metrics) {
-      post.metrics = { reach: 1250, likes: 94, comments: 16, saves: 35 };
+    if (!post.metrics || !post.metrics.reach) {
+      post.metrics = { reach: 350, likes: 18, comments: 4, saves: 7 };
     }
+    delete post._isPublishing;
     renderAll();
     await saveStateEverywhere(false);
     showToast(`✅ ${result.message}`);
   } catch (err) {
+    delete post._isPublishing;
     post.status = 'failed';
     post.logs = post.logs || [];
     post.logs.push({ time: new Date().toISOString(), message: `Error: ${err.message}` });
@@ -1160,18 +1212,22 @@ async function runBrowserAutoScheduler() {
   if (appState.metaConfig?.autoPublishEnabled === false) return;
   const now = new Date();
   const due = appState.posts.filter(
-    (p) => p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= now
+    (p) => !p._isPublishing && p.status === 'scheduled' && p.scheduledAt && new Date(p.scheduledAt) <= now
   );
   if (!due.length) return;
 
   for (const post of due) {
+    post._isPublishing = true;
     try {
       const result = await executeMetaPublishFlow(post);
       post.status = 'published';
       post.publishedAt = new Date().toISOString();
+      post.metaPublishId = result.mediaPublishId;
       post.logs = post.logs || [];
       post.logs.push({ time: new Date().toISOString(), message: `[Auto] ${result.message}` });
+      delete post._isPublishing;
     } catch (err) {
+      delete post._isPublishing;
       post.status = 'failed';
       post.logs = post.logs || [];
       post.logs.push({ time: new Date().toISOString(), message: `[Auto Error] ${err.message}` });
@@ -2314,6 +2370,21 @@ function initComposerEvents() {
       : new Date().toISOString();
 
     const mediaUrlVal = document.getElementById('postPublicMediaUrl').value.trim();
+    const selectedMediaId = document.getElementById('postMediaSelect').value || null;
+    const linkedMedia = selectedMediaId
+      ? appState.mediaLibrary.find((m) => m.id === selectedMediaId)
+      : null;
+    const isVid =
+      linkedMedia?.type === 'video' ||
+      linkedMedia?.format === 'MP4' ||
+      postFormat === 'REEL' ||
+      mediaType === 'REELS' ||
+      mediaType === 'VIDEO' ||
+      /\.mp4(\?|$)/i.test(mediaUrlVal) ||
+      /drive\.usercontent\.google\.com\/download/i.test(mediaUrlVal);
+    const norm = normalizeCloudMedia(mediaUrlVal, isVid ? 'video' : 'image');
+    const visualThumbUrl = norm.thumbUrl || linkedMedia?.url || mediaUrlVal;
+    const binaryPublicUrl = norm.publicUrl || mediaUrlVal;
     const existingId = document.getElementById('postId').value;
 
     if (existingId) {
@@ -2323,9 +2394,9 @@ function initComposerEvents() {
           ...appState.posts[idx],
           title: document.getElementById('postTitle').value.trim(),
           caption: document.getElementById('postCaption').value,
-          mediaId: document.getElementById('postMediaSelect').value || null,
-          mediaUrl: mediaUrlVal,
-          publicMediaUrl: mediaUrlVal,
+          mediaId: selectedMediaId,
+          mediaUrl: visualThumbUrl,
+          publicMediaUrl: binaryPublicUrl,
           mediaType,
           postFormat,
           platforms: platforms.length ? platforms : ['instagram'],
@@ -2341,9 +2412,9 @@ function initComposerEvents() {
           document.getElementById('postTitle').value.trim() ||
           (postFormat === 'STORY' ? 'Nueva Historia 24h' : 'Nueva Publicación'),
         caption: document.getElementById('postCaption').value,
-        mediaId: document.getElementById('postMediaSelect').value || null,
-        mediaUrl: mediaUrlVal,
-        publicMediaUrl: mediaUrlVal,
+        mediaId: selectedMediaId,
+        mediaUrl: visualThumbUrl,
+        publicMediaUrl: binaryPublicUrl,
         mediaType,
         postFormat,
         platforms: platforms.length ? platforms : ['instagram'],

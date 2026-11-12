@@ -38,6 +38,21 @@
   ],
   "mediaLibrary": [
     {
+      "id": "media-1794490496915",
+      "title": "SEGUNDA PRUEBA",
+      "originalUrl": "https://drive.google.com/file/d/1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y/view?usp=drive_link",
+      "driveId": "1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y",
+      "url": "https://lh3.googleusercontent.com/d/1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y=w1080",
+      "publicUrl": "https://drive.usercontent.google.com/download?id=1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y&export=download&confirm=t",
+      "type": "video",
+      "format": "MP4",
+      "tags": [
+        "url-publica",
+        "google-drive"
+      ],
+      "createdAt": "2026-11-12T13:34:56.915Z"
+    },
+    {
       "id": "media-1794489244212",
       "title": "PRUEBA MILAN",
       "url": "https://lh3.googleusercontent.com/d/1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6=w1080",
@@ -48,7 +63,6 @@
         "url-publica"
       ],
       "createdAt": "2026-11-12T13:14:04.212Z",
-      "originalUrl": "https://drive.google.com/file/d/1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6/view?usp=drive_link",
       "driveId": "1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6"
     },
     {
@@ -107,6 +121,47 @@
     }
   ],
   "posts": [
+    {
+      "id": "post-1794490539629",
+      "title": "Historia: SEGUNDA PRUEBA",
+      "caption": "PRUEBA SHEEP 100",
+      "mediaId": "media-1794490496915",
+      "mediaUrl": "https://lh3.googleusercontent.com/d/1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y=w1080",
+      "publicMediaUrl": "https://drive.usercontent.google.com/download?id=1R3xuCs3hGvFCAlzTSzMPffswLI9kCS5y&export=download&confirm=t",
+      "mediaType": "STORIES",
+      "postFormat": "STORY",
+      "platforms": [
+        "instagram",
+        "facebook"
+      ],
+      "scheduledAt": "2026-11-12T13:36:00.000Z",
+      "status": "published",
+      "firstComment": "",
+      "gridOrder": 0,
+      "metrics": {
+        "reach": 0,
+        "likes": 0,
+        "comments": 0,
+        "saves": 0
+      },
+      "createdAt": "2026-11-12T13:35:39.629Z",
+      "logs": [
+        {
+          "time": "2026-11-12T13:35:39.629Z",
+          "message": "Historia (24h) programada en SHEEP 100."
+        },
+        {
+          "time": "2026-11-12T13:36:15.402Z",
+          "message": "[Auto Error] Media ID is not available"
+        },
+        {
+          "time": "2026-11-12T13:48:44.034Z",
+          "message": "⭕ ¡Historia publicada en vivo en Instagram Stories (@cocuyografic)! (ID: 18114618848613590)"
+        }
+      ],
+      "publishedAt": "2026-11-12T13:48:44.033Z",
+      "metaPublishId": "18114618848613590"
+    },
     {
       "id": "post-story-1",
       "title": "Historia: Encuesta & Oferta Flash 24h",

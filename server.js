@@ -425,7 +425,12 @@ function normalizeCloudMediaServer(rawUrl, type = 'image') {
 async function publishToMetaInstagram(post, metaConfig) {
   const { accessToken, igUserId, simulationFallback } = metaConfig;
   const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const isVid = /\.mp4(\?|$)/i.test(rawMediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
+  const isVid =
+    /\.mp4(\?|$)/i.test(rawMediaUrl) ||
+    /drive\.usercontent\.google\.com\/download/i.test(rawMediaUrl) ||
+    post.mediaType === 'REELS' ||
+    post.mediaType === 'VIDEO' ||
+    post.postFormat === 'REEL';
   const norm = normalizeCloudMediaServer(rawMediaUrl, isVid ? 'video' : 'image');
   const mediaUrl = norm.publicUrl || rawMediaUrl;
 
@@ -466,14 +471,17 @@ async function publishToMetaInstagram(post, metaConfig) {
   }
 
   // Real 2-Step Meta Graph API Call
-  const graphBase = 'https://graph.facebook.com/v21.0';
+  const graphBase = 'https://graph.facebook.com/v22.0';
 
   // STEP 1: Create Media Container (Supports Feed IMAGE, REELS, and 24h STORIES)
   const containerParams = new URLSearchParams();
   containerParams.append('access_token', accessToken);
 
   const isStory = post.postFormat === 'STORY' || post.mediaType === 'STORIES';
-  const isVideoFile = /\.mp4(\?|$)/i.test(mediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
+  const isVideoFile =
+    isVid ||
+    /\.mp4(\?|$)/i.test(mediaUrl) ||
+    /drive\.usercontent\.google\.com\/download/i.test(mediaUrl);
 
   if (isStory) {
     containerParams.append('media_type', 'STORIES');
@@ -482,7 +490,7 @@ async function publishToMetaInstagram(post, metaConfig) {
     } else {
       containerParams.append('image_url', mediaUrl);
     }
-  } else if (post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+  } else if (isVideoFile || post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
     containerParams.append('media_type', 'REELS');
     containerParams.append('video_url', mediaUrl);
     containerParams.append('caption', post.caption || '');
@@ -507,18 +515,17 @@ async function publishToMetaInstagram(post, metaConfig) {
 
   const creationId = step1Data.id;
 
-  // If video/Reels or Story, wait briefly or poll status_code
-  if (isStory || isVideoFile) {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await new Promise((r) => setTimeout(r, 2500));
-      const statusRes = await fetch(
-        `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
-      );
-      const statusData = await statusRes.json();
-      if (statusData.status_code === 'FINISHED') break;
-      if (statusData.status_code === 'ERROR') {
-        throw new Error(`Meta rechazó el procesamiento del archivo: ${statusData.status || 'Formato no compatible'}`);
-      }
+  // Poll status_code until FINISHED before calling media_publish
+  const maxPolls = isStory || isVideoFile ? 30 : 10;
+  for (let attempt = 0; attempt < maxPolls; attempt++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const statusRes = await fetch(
+      `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const statusData = await statusRes.json();
+    if (statusData.status_code === 'FINISHED') break;
+    if (statusData.status_code === 'ERROR' || statusData.status_code === 'EXPIRED') {
+      throw new Error(`Meta rechazó el procesamiento del archivo: ${statusData.status || 'Formato no compatible'}`);
     }
   }
 
