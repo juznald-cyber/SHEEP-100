@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#6366f1" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>SHEEP 100 — Planificador & Automatizador Social</title>
+  <title>SHEEP 100 — Planificador de Posts, Historias & Métricas</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="stylesheet" href="./styles.css?v=2.8" />
+  <link rel="stylesheet" href="./styles.css" />
 
   <!-- Firebase SDK (Cloud Firestore + Auth en Tiempo Real para sheep-100-b8a90) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -37,7 +37,7 @@
         <img src="./icon.svg" alt="SHEEP 100" />
       </div>
       <h2>SHEEP 100</h2>
-      <p class="login-sub">Ingresa con tu usuario y contraseña para acceder al planificador</p>
+      <p class="login-sub">Ingresa con tu usuario y contraseña para gestionar tus Posts, Historias y Métricas</p>
 
       <form id="loginForm" autocomplete="on">
         <label for="loginUser">Usuario o Correo</label>
@@ -86,27 +86,39 @@
         <img src="./icon.svg" alt="SHEEP 100 Logo" class="brand-icon" />
         <div>
           <h1 class="brand-title">SHEEP 100</h1>
-          <span class="brand-subtitle">Social Planner • Web + App</span>
+          <span class="brand-subtitle">Posts • Historias • Métricas</span>
         </div>
       </div>
 
-      <button class="btn-primary btn-new-post" id="btnOpenComposer">
-        <span>＋</span> Crear / Programar Post
-      </button>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn-primary btn-new-post" id="btnOpenComposer">
+          <span>📸</span> + Nuevo Post / Reel
+        </button>
+        <button class="btn-story-cta" id="btnOpenStoryComposer">
+          <span>⭕</span> + Programar Historia (24h)
+        </button>
+      </div>
 
       <nav class="side-nav">
         <button class="nav-item active" data-tab="calendar">
           <span class="nav-icon">📅</span>
           <div>
             <div class="nav-label">Calendario Visual</div>
-            <div class="nav-desc">Drag & Drop semanal</div>
+            <div class="nav-desc">Posts e Historias</div>
           </div>
         </button>
         <button class="nav-item" data-tab="grid">
           <span class="nav-icon">📱</span>
           <div>
-            <div class="nav-label">Feed Grid Preview</div>
-            <div class="nav-desc">Estética 3x3 Instagram</div>
+            <div class="nav-label">Feed & Stories Preview</div>
+            <div class="nav-desc">Cuadrícula 3x3 + Anillo 24h</div>
+          </div>
+        </button>
+        <button class="nav-item" data-tab="metrics">
+          <span class="nav-icon">📊</span>
+          <div>
+            <div class="nav-label">Métricas & Insights</div>
+            <div class="nav-desc">Alcance, Likes y Retención</div>
           </div>
         </button>
         <button class="nav-item" data-tab="media">
@@ -130,13 +142,6 @@
             <div class="nav-desc" id="wizardProgressBadge">Guía Modo Desarrollo</div>
           </div>
         </button>
-        <button class="nav-item nav-item-highlight" data-tab="tiktok-wizard">
-          <span class="nav-icon">🎵</span>
-          <div>
-            <div class="nav-label">Paso a Paso TikTok</div>
-            <div class="nav-desc" id="tiktokProgressBadge">Modo Sandbox</div>
-          </div>
-        </button>
       </nav>
 
       <!-- Estado de Conexión con Meta -->
@@ -150,20 +155,6 @@
         </p>
         <button class="btn-secondary btn-sm full-width" onclick="switchTab('meta-wizard')">
           Configurar Meta API →
-        </button>
-      </div>
-
-      <!-- Estado de Conexión con TikTok -->
-      <div class="meta-status-card" id="sidebarTikTokCard" style="margin-top:10px;">
-        <div class="meta-status-header">
-          <span class="status-dot" id="tiktokStatusDot"></span>
-          <strong id="tiktokStatusTitle">TikTok: Pendiente</strong>
-        </div>
-        <p id="tiktokStatusDesc" class="meta-status-desc">
-          Conecta @cocuyo.grafic en Modo Sandbox.
-        </p>
-        <button class="btn-secondary btn-sm full-width" onclick="switchTab('tiktok-wizard')">
-          Configurar TikTok API →
         </button>
       </div>
     </aside>
@@ -197,7 +188,7 @@
             Salir
           </button>
           <button class="btn-primary mobile-only-btn" onclick="openComposerModal()">
-            ＋ Post
+            ＋ Crear
           </button>
         </div>
       </header>
@@ -217,11 +208,14 @@
                 <span class="badge">Arrastra al calendario</span>
               </div>
               <p class="drawer-hint">
-                Arrastra cualquier foto o video hacia un día del calendario para crear un post programado al instante.
+                Arrastra cualquier foto o video hacia un día del calendario y elige si será <strong>Post normal</strong>, <strong>Historia (24h)</strong> o <strong>Reel</strong>.
               </p>
-              <div class="drawer-upload-bar">
+              <div class="drawer-upload-bar" style="display:flex;gap:6px;">
                 <button class="btn-secondary btn-sm full-width" onclick="switchTab('media')">
-                  ＋ Subir nuevos medios
+                  ＋ Subir medios
+                </button>
+                <button class="btn-story-sm" onclick="openComposerModal({ defaultFormat: 'STORY' })">
+                  ⭕ + Historia
                 </button>
               </div>
               <div class="drawer-media-list" id="calendarMediaDrawer"></div>
@@ -238,24 +232,27 @@
                 </div>
 
                 <div class="status-legend">
-                  <span class="legend-item"><i class="dot-draft"></i> Borrador</span>
+                  <span class="legend-item"><i class="dot-story"></i> ⭕ Historia 24h</span>
                   <span class="legend-item"><i class="dot-scheduled"></i> Programado</span>
                   <span class="legend-item"><i class="dot-published"></i> Publicado</span>
+                  <span class="legend-item"><i class="dot-draft"></i> Borrador</span>
                 </div>
               </div>
 
               <!-- 7-Day Visual Drop Grid -->
               <div class="week-grid" id="weekGrid"></div>
 
-              <!-- List of All Posts by Filter -->
+              <!-- List of All Posts & Stories by Filter -->
               <div class="queue-section">
                 <div class="queue-header">
-                  <h3>📋 Bandeja de Planificación y Estado de Envíos</h3>
+                  <h3>📋 Bandeja de Planificación (Posts, Reels e Historias)</h3>
                   <div class="filter-pills" id="postFilterPills">
                     <button class="pill active" data-filter="all">Todos</button>
-                    <button class="pill" data-filter="scheduled">Programados</button>
-                    <button class="pill" data-filter="draft">Borradores</button>
-                    <button class="pill" data-filter="published">Publicados</button>
+                    <button class="pill" data-filter="POST">📸 Posts / Reels</button>
+                    <button class="pill" data-filter="STORY">⭕ Historias (24h)</button>
+                    <button class="pill" data-filter="scheduled">⏰ Programados</button>
+                    <button class="pill" data-filter="published">✔ Publicados</button>
+                    <button class="pill" data-filter="draft">📝 Borradores</button>
                   </div>
                 </div>
                 <div class="posts-table-list" id="postsQueueList"></div>
@@ -265,39 +262,35 @@
         </section>
 
         <!-- ==========================================
-             TAB 2: VISUAL FEED GRID PREVIEW (INSTAGRAM)
+             TAB 2: VISUAL FEED & STORIES PREVIEW
              ========================================== -->
         <section class="tab-panel" id="tab-grid">
           <div class="grid-planner-layout">
             <div class="grid-planner-info">
               <div class="card">
-                <h3>📱 Previsualizador Estético de Feed — SHEEP 100</h3>
+                <h3>📱 Previsualizador de Feed 3x3 + Anillo de Historias</h3>
                 <p class="muted-text">
-                  Comprueba cómo se verá la cuadrícula 3x3 de tu perfil de Instagram antes de que tus publicaciones salgan al aire.
-                  <strong>Arrastra y suelta las casillas</strong> en el teléfono para cambiar el orden visual.
+                  Arriba de la cuadrícula puedes ver tus <strong>⭕ Historias programadas o activas</strong> (haz clic en cualquiera para verla en formato vertical 9:16), y abajo puedes <strong>arrastrar y soltar tus Posts</strong> para diseñar la estética de tu perfil.
                 </p>
                 <div class="stats-mini-grid">
                   <div class="stat-box">
                     <span class="stat-num" id="statScheduledCount">0</span>
-                    <span class="stat-label">Programados</span>
+                    <span class="stat-label">Posts en Cola</span>
+                  </div>
+                  <div class="stat-box">
+                    <span class="stat-num" id="statStoriesCount">0</span>
+                    <span class="stat-label">⭕ Historias</span>
                   </div>
                   <div class="stat-box">
                     <span class="stat-num" id="statPublishedCount">0</span>
                     <span class="stat-label">Publicados</span>
                   </div>
-                  <div class="stat-box">
-                    <span class="stat-num" id="statMediaCount">0</span>
-                    <span class="stat-label">En Librería</span>
-                  </div>
                 </div>
 
                 <hr class="divider" />
-                <h4>⚡ Acciones Rápidas para Modo App / Móvil</h4>
-                <p class="muted-text">
-                  Si usas TikTok o aún no activas la publicación directa por API, haz clic en cualquier post de la cuadrícula para <strong>descargar la foto y copiar el texto al portapapeles en 1 toque</strong>.
-                </p>
+                <h4>🔍 Vista Detallada del Post o Historia Seleccionada</h4>
                 <div id="selectedGridPostDetail" class="selected-grid-detail">
-                  <em>Selecciona una miniatura del teléfono para ver sus detalles o publicarla ahora.</em>
+                  <em>Haz clic en un círculo de Historia o en una foto de la cuadrícula del teléfono para previsualizarla o publicarla ahora.</em>
                 </div>
               </div>
             </div>
@@ -311,21 +304,25 @@
                   <span class="ig-badge">Empresa</span>
                 </div>
                 <div class="ig-profile-row">
-                  <div class="ig-avatar">🐑</div>
+                  <div class="ig-avatar" onclick="openComposerModal({ defaultFormat: 'STORY' })" title="Clic para programar una Historia">🐑</div>
                   <div class="ig-metrics">
-                    <div><strong>128</strong><span>Posts</span></div>
-                    <div><strong>4.8K</strong><span>Seguidores</span></div>
+                    <div><strong id="igMockPostsCount">128</strong><span>Posts</span></div>
+                    <div><strong id="igMockFollowersCount">4.8K</strong><span>Seguidores</span></div>
                     <div><strong>310</strong><span>Siguiendo</span></div>
                   </div>
                 </div>
                 <div class="ig-bio">
                   <strong>SHEEP 100 • Planificación & Automatización ✨</strong>
-                  <p>Sincronizado en tiempo real con Firebase & Meta Graph API 🚀</p>
+                  <p>Posts, Reels e Historias 24h automatizados con Meta API 🚀</p>
                 </div>
+
+                <!-- BARRA DE HISTORIAS (STORIES TRAY) -->
+                <div class="ig-stories-tray" id="igStoriesTray"></div>
+
                 <div class="ig-tabs">
                   <span class="active">▦ CUADRÍCULA</span>
                   <span>🎬 REELS</span>
-                  <span>🏷️ ETIQUETADOS</span>
+                  <span>⭕ HISTORIAS</span>
                 </div>
                 <div class="ig-grid-3x3" id="igGridContainer"></div>
               </div>
@@ -334,37 +331,153 @@
         </section>
 
         <!-- ==========================================
-             TAB 3: MEDIA LIBRARY (GESTIÓN DE MEDIOS)
+             TAB 3: MÉTRICAS & INSIGHTS (NUEVO)
+             ========================================== -->
+        <section class="tab-panel" id="tab-metrics">
+          <div class="metrics-layout">
+            <!-- Banner superior de sincronización de métricas -->
+            <div class="metrics-header-card">
+              <div>
+                <span class="hero-pill">📊 ANALÍTICA INTEGRADA DE INSTAGRAM & FACEBOOK</span>
+                <h3>Centro de Métricas y Rendimiento — SHEEP 100</h3>
+                <p class="muted-text" style="margin-bottom:0;">
+                  Revisa el alcance, interacciones, retención de Historias y crecimiento de tu cuenta. Si ya conectaste tu Token de Meta, pulsa <strong>"Sincronizar con Meta Insights"</strong> para traer los datos en vivo de tu cuenta.
+                </p>
+              </div>
+              <div class="metrics-actions">
+                <button class="btn-primary" id="btnSyncMetaMetrics">
+                  🔄 Sincronizar con Meta Insights API
+                </button>
+              </div>
+            </div>
+
+            <!-- Tarjetas KPI Principales -->
+            <div class="kpi-grid-4">
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">👥 Seguidores Totales</span>
+                  <span class="kpi-trend up" id="kpiFollowersTrend">+4.2%</span>
+                </div>
+                <div class="kpi-value" id="kpiFollowersVal">4,820</div>
+                <div class="kpi-sub">Cuenta Instagram Business</div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">👁️ Cuentas Alcanzadas (Alcance)</span>
+                  <span class="kpi-trend up" id="kpiReachTrend">+18.6%</span>
+                </div>
+                <div class="kpi-value" id="kpiReachVal">14,950</div>
+                <div class="kpi-sub">Posts + Reels + Historias</div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">💬 Interacciones Totales</span>
+                  <span class="kpi-trend up" id="kpiEngagementTrend">+12.4%</span>
+                </div>
+                <div class="kpi-value" id="kpiInteractionsVal">1,385</div>
+                <div class="kpi-sub">Likes, Comentarios, Guardados y DMs</div>
+              </div>
+
+              <div class="kpi-card">
+                <div class="kpi-top">
+                  <span class="kpi-label">🔥 Engagement Rate Promedio</span>
+                  <span class="kpi-trend up">Excelente</span>
+                </div>
+                <div class="kpi-value" id="kpiErVal">6.8%</div>
+                <div class="kpi-sub">Supera el promedio del sector (3.5%)</div>
+              </div>
+            </div>
+
+            <!-- Segunda fila: Gráfico por Día + Comparativa Posts vs Historias vs Reels -->
+            <div class="metrics-charts-grid">
+              <div class="card">
+                <div class="section-header-row">
+                  <h3>📈 Evolución de Alcance y Visualizaciones (Últimos 7 días)</h3>
+                  <span class="badge">Posts + Historias</span>
+                </div>
+                <div class="bar-chart-container" id="weeklyReachChart"></div>
+              </div>
+
+              <div class="card">
+                <h3>⚡ Rendimiento por Formato (Post vs. Historia vs. Reel)</h3>
+                <p class="muted-text">
+                  Comparativa de alcance promedio y tasa de respuesta según el tipo de publicación programada en SHEEP 100:
+                </p>
+                <div id="formatBreakdownContainer" class="format-breakdown-list"></div>
+
+                <hr class="divider" />
+                <h4>⏰ Mejores Horarios Detectados para tu Audiencia</h4>
+                <div class="best-times-chips">
+                  <span class="time-chip">🔥 Lun y Mié • 18:30 hrs (Posts)</span>
+                  <span class="time-chip">⭕ Todos los días • 09:30 y 20:00 hrs (Historias)</span>
+                  <span class="time-chip">🎬 Jue y Vie • 13:00 hrs (Reels)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla de Métricas por Publicación e Historia -->
+            <div class="card">
+              <div class="section-header-row">
+                <h3>📋 Desglose de Métricas por Post e Historia</h3>
+                <div class="filter-pills" id="metricsFilterPills">
+                  <button class="pill active" data-mfilter="all">Todos</button>
+                  <button class="pill" data-mfilter="POST">📸 Posts / Reels</button>
+                  <button class="pill" data-mfilter="STORY">⭕ Historias</button>
+                </div>
+              </div>
+              <div class="metrics-table-wrapper">
+                <table class="metrics-table">
+                  <thead>
+                    <tr>
+                      <th>Publicación / Historia</th>
+                      <th>Formato</th>
+                      <th>Estado</th>
+                      <th>👁️ Alcance / Vistas</th>
+                      <th>❤️ Likes</th>
+                      <th>💬 Comentarios / Respuestas</th>
+                      <th>🔖 Guardados / Clics</th>
+                      <th>🔥 Engagement</th>
+                    </tr>
+                  </thead>
+                  <tbody id="metricsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==========================================
+             TAB 4: MEDIA LIBRARY (GESTIÓN DE MEDIOS)
              ========================================== -->
         <section class="tab-panel" id="tab-media">
           <div class="media-library-layout">
             <div class="card upload-card">
-              <h3>📤 Subir o Vincular Archivos Multimedia</h3>
+              <h3>📤 Subir o Vincular Archivos para Posts e Historias</h3>
               <p class="muted-text">
-                Sube imágenes (<strong>JPG recomendado por Meta</strong>) o videos (<strong>MP4 para Reels</strong>). También puedes pegar una URL pública directa para que la API de Meta Graph pueda descargarla automáticamente desde cualquier lugar.
+                Sube imágenes (<strong>JPG recomendado por Meta</strong>, proporción 1:1 para Post o 9:16 vertical para Historia) o videos (<strong>MP4</strong> para Reels e Historias).
               </p>
 
               <div class="upload-forms-grid">
-                <!-- Local / Cloud File Upload -->
                 <form id="formUploadFile" class="upload-box">
                   <h4>1. Subir archivo desde tu dispositivo</h4>
                   <input type="file" id="inputFile" accept="image/jpeg,image/png,image/webp,video/mp4" required />
-                  <input type="text" id="inputFileTitle" placeholder="Título descriptivo (ej. Promo Viernes)" />
+                  <input type="text" id="inputFileTitle" placeholder="Título descriptivo (ej. Historia Promo Viernes)" />
                   <input type="url" id="inputFilePublicUrl" placeholder="URL pública opcional (https://...jpg) para Meta API" />
-                  <input type="text" id="inputFileTags" placeholder="Etiquetas separadas por coma (ej. producto, reel)" />
+                  <input type="text" id="inputFileTags" placeholder="Etiquetas separadas por coma (ej. historia, promo)" />
                   <button type="submit" class="btn-primary full-width">Subir a Media Library</button>
                 </form>
 
-                <!-- Public URL Form -->
                 <form id="formAddUrl" class="upload-box">
                   <h4>2. Agregar por URL Pública (Listo para Meta Graph API)</h4>
-                  <input type="url" id="inputMediaUrl" placeholder="https://ejemplo.com/mi-imagen.jpg" required />
+                  <input type="url" id="inputMediaUrl" placeholder="https://ejemplo.com/mi-historia.jpg" required />
                   <input type="text" id="inputMediaTitle" placeholder="Nombre del recurso" required />
                   <select id="inputMediaType">
-                    <option value="image">Imagen (JPG - Post Instagram/Facebook)</option>
-                    <option value="video">Video (MP4 - Reel / TikTok)</option>
+                    <option value="image">Imagen JPG (Post o Historia 24h)</option>
+                    <option value="video">Video MP4 (Reel o Historia en Video)</option>
                   </select>
-                  <input type="text" id="inputMediaTags" placeholder="Etiquetas (ej. campaña, lanzamiento)" />
+                  <input type="text" id="inputMediaTags" placeholder="Etiquetas (ej. story, lanzamiento)" />
                   <button type="submit" class="btn-secondary full-width">Guardar URL en Librería</button>
                 </form>
               </div>
@@ -381,27 +494,28 @@
         </section>
 
         <!-- ==========================================
-             TAB 4: ESTUDIO IA (COPIES & HASHTAGS)
+             TAB 5: ESTUDIO IA (COPIES & HASHTAGS)
              ========================================== -->
         <section class="tab-panel" id="tab-ai">
           <div class="ai-studio-layout">
             <div class="card">
               <h3>✨ Generador y Optimizador de Textos con IA</h3>
               <p class="muted-text">
-                Genera copies persuasivos, estructuras para Reels/TikTok y bloques de hashtags optimizados en segundos.
+                Genera copies persuasivos para Posts, guiones cortos para Historias (secuencias de 3 historias) y bloques de hashtags optimizados.
               </p>
 
               <form id="formAiGenerator" class="ai-form">
-                <label>¿Sobre qué trata tu publicación?</label>
-                <textarea id="aiTopic" rows="3" placeholder="Ej: Lanzamiento de nuestra nueva colección de invierno con 20% de descuento por 48 horas..." required></textarea>
+                <label>¿Sobre qué trata tu Post o Historia?</label>
+                <textarea id="aiTopic" rows="3" placeholder="Ej: Lanzamiento de nuestra nueva colección con 20% de descuento por 24 horas..." required></textarea>
 
                 <div class="form-row-2">
                   <div>
-                    <label>Red Social Principal</label>
+                    <label>Formato Destino</label>
                     <select id="aiPlatform">
-                      <option value="Instagram Feed & Reels">Instagram (Feed / Reels)</option>
-                      <option value="TikTok">TikTok</option>
-                      <option value="Facebook Page">Facebook Page</option>
+                      <option value="Post de Instagram Feed">📸 Post de Instagram Feed</option>
+                      <option value="Secuencia de Historias (Stories 24h)">⭕ Historias de Instagram (Stories 24h)</option>
+                      <option value="Instagram Reels">🎬 Instagram Reels</option>
+                      <option value="Facebook Page">📘 Facebook Page</option>
                     </select>
                   </div>
                   <div>
@@ -409,17 +523,17 @@
                     <select id="aiTone">
                       <option value="Cercano y Magnético">Cercano y Magnético</option>
                       <option value="Profesional y Experto">Profesional y Educativo</option>
-                      <option value="Venta Directa y Urgencia">Venta Directa / Promoción</option>
+                      <option value="Venta Directa y Urgencia">Venta Directa / Promoción 24h</option>
                       <option value="Viral y Dinámico">Viral / Storytelling</option>
                     </select>
                   </div>
                 </div>
 
                 <label>Llamado a la Acción (CTA)</label>
-                <input type="text" id="aiCta" placeholder="Ej: Escribe INFO en los comentarios y te enviamos el link por DM" />
+                <input type="text" id="aiCta" placeholder="Ej: Responde esta historia con la palabra QUIERO y te enviamos el cupón" />
 
                 <button type="submit" class="btn-primary full-width" id="btnRunAi">
-                  ✨ Generar 3 Propuestas de Copy + Hashtags
+                  ✨ Generar 3 Propuestas + Hashtags
                 </button>
               </form>
 
@@ -433,7 +547,7 @@
               <h3>📝 Resultados Generados</h3>
               <div id="aiResultsContainer" class="ai-results-container">
                 <div class="empty-state">
-                  <p>Escribe tu idea a la izquierda y pulsa <strong>"Generar 3 Propuestas"</strong>. Podrás enviarlas directo al programador con un clic.</p>
+                  <p>Escribe tu idea a la izquierda y pulsa <strong>"Generar 3 Propuestas"</strong>. Podrás enviarlas como Post o como Historia con un clic.</p>
                 </div>
               </div>
             </div>
@@ -441,18 +555,17 @@
         </section>
 
         <!-- ==========================================
-             TAB 5: PASO A PASO META (MODO DESARROLLO)
+             TAB 6: PASO A PASO META (MODO DESARROLLO)
              ========================================== -->
         <section class="tab-panel" id="tab-meta-wizard">
           <div class="wizard-layout">
-            <!-- Banner explicativo del Truco Modo Desarrollo -->
             <div class="meta-hero-banner">
               <div>
                 <span class="hero-pill">💡 TRUCO OFICIAL PARA USO PROPIO (SIN APP REVIEW)</span>
-                <h3>Conecta tu cuenta de Instagram Business en Modo Desarrollo</h3>
+                <h3>Conecta tu Instagram Business para Posts, Historias y Métricas</h3>
                 <p>
-                  Como solo vas a automatizar <strong>tu propia cuenta empresa</strong>, <strong>NO necesitas enviar videos (screencasts), ni capturas de pantalla, ni pasar por la revisión pública de Meta</strong>.
-                  Dejando tu app en <em>Modo Desarrollo (Development Mode)</em> y agregándote como Tester, tienes acceso completo y gratuito a la API oficial de publicación.
+                  Como solo vas a automatizar <strong>tu propia cuenta empresa</strong>, <strong>NO necesitas enviar videos ni pasar por la revisión pública de Meta</strong>.
+                  Con tu app en <em>Modo Desarrollo</em> puedes publicar tanto <strong>Posts normales</strong> como <strong>Historias (Stories)</strong> y leer las <strong>Métricas (Insights)</strong> de tu cuenta.
                 </p>
               </div>
               <div class="wizard-progress-circle">
@@ -462,9 +575,8 @@
             </div>
 
             <div class="wizard-grid">
-              <!-- Columna Izquierda: Los 5 Pasos Interactivos -->
               <div class="wizard-steps-col">
-                <h3>✅ Lista de Verificación Paso a Paso (23 min en total)</h3>
+                <h3>✅ Lista de Verificación Paso a Paso</h3>
 
                 <!-- PASO 1 -->
                 <div class="step-card" id="card-step1">
@@ -480,12 +592,9 @@
                   </div>
                   <ol class="step-instructions">
                     <li>Entra a <a href="https://developers.facebook.com/" target="_blank" rel="noopener">developers.facebook.com</a>, inicia sesión con tu Facebook personal y haz clic en <strong>"Mis aplicaciones" → "Crear aplicación"</strong>.</li>
-                    <li>Si te pregunta caso de uso, elige <strong>"Otros" (Other)</strong> al final de la lista y luego selecciona el tipo <strong>"Empresa" (Business)</strong>.</li>
-                    <li>Asigna un nombre (ej. <code>SHEEP 100</code>), pon tu correo y haz clic en <strong>"Crear app"</strong>.</li>
+                    <li>Elige <strong>"Otros" (Other)</strong> y luego selecciona el tipo <strong>"Empresa" (Business)</strong>.</li>
+                    <li>Asigna el nombre <code>SHEEP 100</code> y haz clic en <strong>"Crear app"</strong>.</li>
                   </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Verás el panel principal con tu <code>Identificador de la app (App ID)</code> arriba a la izquierda, y el selector dirá <strong>"En desarrollo"</strong>.
-                  </div>
                 </div>
 
                 <!-- PASO 2 -->
@@ -498,12 +607,9 @@
                     </label>
                   </div>
                   <ol class="step-instructions">
-                    <li>En el panel principal (Dashboard) de tu app en Meta, baja hasta la sección <strong>"Agregar productos a tu app"</strong>.</li>
-                    <li>Busca <strong>Instagram Graph API</strong> (o <strong>Instagram</strong>) y haz clic en el botón <strong>"Configurar" (Set Up)</strong>.</li>
+                    <li>En el panel principal de tu app en Meta, baja a <strong>"Agregar productos a tu app"</strong>.</li>
+                    <li>Busca <strong>Instagram Graph API</strong> y haz clic en <strong>"Configurar" (Set Up)</strong>.</li>
                   </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> El producto aparecerá listado en el menú lateral izquierdo de tu aplicación.
-                  </div>
                 </div>
 
                 <!-- PASO 3 -->
@@ -512,17 +618,13 @@
                     <label class="step-check-label">
                       <input type="checkbox" data-step="step3_testerRole" class="wizard-checkbox" />
                       <span class="step-num">Paso 3</span>
-                      <strong>Configurar Roles y agregarte como Tester / Evaluador (5 min)</strong>
+                      <strong>Configurar Roles y agregarte como Tester / Administrador (5 min)</strong>
                     </label>
                   </div>
                   <ol class="step-instructions">
-                    <li>Como creador de la app ya eres <strong>Administrador</strong>. Si tu Página de Facebook e Instagram están en ese mismo perfil, ya estás autorizado.</li>
-                    <li>Si deseas autorizar otra cuenta tuya, ve en el menú izquierdo a <strong>Roles de la app → Roles</strong>.</li>
-                    <li>Haz clic en <strong>"Agregar personas"</strong>, elige <strong>Evaluador (Tester)</strong>, ingresa tu usuario y acepta la invitación en Facebook.</li>
+                    <li>Como creador de la app ya eres <strong>Administrador</strong> autorizado en Modo Desarrollo.</li>
+                    <li>Si quieres agregar otra cuenta tuya, ve a <strong>Roles de la app → Roles → Agregar personas (Tester)</strong>.</li>
                   </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Tu cuenta figura como Administrador o Evaluador activo en Modo Desarrollo.
-                  </div>
                 </div>
 
                 <!-- PASO 4 -->
@@ -535,12 +637,9 @@
                     </label>
                   </div>
                   <ol class="step-instructions">
-                    <li>Asegúrate de que tu cuenta de Instagram sea de tipo <strong>Empresa (Business)</strong> o <strong>Creador</strong> (en la app móvil de Instagram: <em>Configuración → Tipo de cuenta y herramientas</em>).</li>
-                    <li>Entra a tu <strong>Página de Facebook</strong> en el navegador → <strong>Configuración → Cuentas vinculadas (Linked Accounts) → Instagram</strong> y haz clic en <strong>Conectar cuenta</strong>.</li>
+                    <li>Verifica que tu cuenta de Instagram sea <strong>Empresa (Business)</strong> o <strong>Creador</strong>.</li>
+                    <li>En tu Página de Facebook ve a <strong>Configuración → Cuentas vinculadas → Instagram</strong> y conéctala.</li>
                   </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Tu Página de Facebook y tu Instagram profesional están oficialmente enlazados (puente obligatorio de Meta).
-                  </div>
                 </div>
 
                 <!-- PASO 5 -->
@@ -549,37 +648,34 @@
                     <label class="step-check-label">
                       <input type="checkbox" data-step="step5_accessToken" class="wizard-checkbox" />
                       <span class="step-num">Paso 5</span>
-                      <strong>Generar el Access Token en Graph API Explorer (5 min)</strong>
+                      <strong>Generar Token con permisos de Posts, Historias y Métricas (5 min)</strong>
                     </label>
                     <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener" class="btn-link">
                       Abrir Graph API Explorer ↗
                     </a>
                   </div>
                   <ol class="step-instructions">
-                    <li>Abre <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> y selecciona tu App en el desplegable superior derecho <strong>"Meta App"</strong>.</li>
-                    <li>En <strong>Permissions (Permisos)</strong>, añade estos 4 permisos clave (haz clic para copiar):
+                    <li>Abre <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> y selecciona tu App.</li>
+                    <li>Añade estos 5 permisos (incluye <code>instagram_manage_insights</code> para ver las métricas en SHEEP 100):
                       <div class="perm-chips">
                         <span class="perm-chip" onclick="copyText('instagram_basic')">instagram_basic 📋</span>
                         <span class="perm-chip" onclick="copyText('instagram_content_publish')">instagram_content_publish 📋</span>
+                        <span class="perm-chip" onclick="copyText('instagram_manage_insights')">instagram_manage_insights 📋</span>
                         <span class="perm-chip" onclick="copyText('pages_show_list')">pages_show_list 📋</span>
                         <span class="perm-chip" onclick="copyText('pages_read_engagement')">pages_read_engagement 📋</span>
                       </div>
                     </li>
-                    <li>Haz clic en el botón azul <strong>"Generate Access Token"</strong>, selecciona tu Página de Facebook y tu cuenta de Instagram en la ventana emergente y autoriza.</li>
-                    <li>Copia el código largo generado (<code>EAA...</code>) y pégalo en el panel de conexión de la derecha 👉.</li>
+                    <li>Haz clic en <strong>"Generate Access Token"</strong>, autoriza tu página e Instagram y pega el token a la derecha 👉.</li>
                   </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Al pegar tu token a la derecha y pulsar <em>"Autodetectar Cuenta con Meta"</em>, SHEEP 100 rellenará tu ID de Instagram automáticamente y lo sincronizará en Firebase.
-                  </div>
                 </div>
               </div>
 
-              <!-- Columna Derecha: Panel de Credenciales + Validador en Vivo + Código 2 Pasos -->
+              <!-- Columna Derecha: Panel de Credenciales -->
               <div class="wizard-config-col">
                 <div class="card">
                   <h3>🔑 Conexión en Vivo con Meta Graph API</h3>
                   <p class="muted-text">
-                    Pega tu <strong>Access Token</strong> del Paso 5 y pulsa <strong>"Verificar y Autodetectar"</strong>. SHEEP 100 consultará la API de Meta directamente para obtener tu <code>Instagram Business ID</code>.
+                    Pega tu <strong>Access Token</strong> del Paso 5 y pulsa <strong>"Verificar y Autodetectar"</strong>.
                   </p>
 
                   <form id="formMetaConfig" class="meta-config-form">
@@ -642,200 +738,22 @@
                   </form>
                 </div>
 
-                <!-- Explicación Técnica del Flujo de 2 Pasos de Meta -->
                 <div class="card code-preview-card">
-                  <h3>⚙️ Flujo Oficial de 2 Pasos de Meta Graph API</h3>
+                  <h3>⚙️ Cómo publica SHEEP 100 tanto Posts como Historias</h3>
                   <p class="muted-text">
-                    Instagram Graph API publica mediante 2 peticiones POST consecutivas (acepta imágenes <strong>JPG</strong> y videos <strong>MP4</strong> con URL pública):
+                    Para <strong>Historias (Stories)</strong>, Meta usa el mismo endpoint cambiando <code>media_type: "STORIES"</code>:
                   </p>
-                  <pre class="code-block" id="metaCodeSnippet">// PASO 1: Crear el contenedor de medios en Meta
+                  <pre class="code-block" id="metaCodeSnippet">// OPCIÓN A: Post Normal de Feed
 POST https://graph.facebook.com/v21.0/{IG_USER_ID}/media
-Body: {
-  image_url: "https://tu-dominio.com/foto.jpg",
-  caption: "Tu copy con #hashtags",
-  access_token: "EAA..."
-}
+Body: { image_url: "https://.../post.jpg", caption: "..." }
 
-// PASO 2: Publicar el contenedor (media_publish)
+// OPCIÓN B: Historia de 24h (Story)
+POST https://graph.facebook.com/v21.0/{IG_USER_ID}/media
+Body: { media_type: "STORIES", image_url: "https://.../historia.jpg" }
+
+// PASO 2 COMÚN: Publicar contenedor
 POST https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish
-Body: {
-  creation_id: "17895695668004550",
-  access_token: "EAA..."
-}</pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ==========================================
-             TAB 6: PASO A PASO TIKTOK (MODO SANDBOX)
-             ========================================== -->
-        <section class="tab-panel" id="tab-tiktok-wizard">
-          <div class="wizard-layout">
-            <div class="meta-hero-banner" style="background: linear-gradient(135deg, rgba(0, 242, 234, 0.15), rgba(255, 0, 79, 0.18)); border-color: rgba(0, 242, 234, 0.4);">
-              <div>
-                <span class="hero-pill" style="background: rgba(0, 242, 234, 0.2); color: #00f2ea;">🎵 TIKTOK CONTENT POSTING API (MODO SANDBOX)</span>
-                <h3>Conecta tu cuenta de TikTok en Modo Pruebas</h3>
-                <p>
-                  Automatiza publicaciones en tu cuenta de TikTok (<strong>@cocuyo.grafic</strong>) utilizando tu App en modo Sandbox.
-                  Admite videos en formato MP4 verticales (9:16) con auto-publicación programada.
-                </p>
-              </div>
-              <div class="wizard-progress-circle" style="border-color: #00f2ea;">
-                <strong id="tiktokPercentText" style="color: #00f2ea;">0%</strong>
-                <span>Completado</span>
-              </div>
-            </div>
-
-            <div class="wizard-grid">
-              <!-- Columna Izquierda: Pasos de TikTok -->
-              <div class="wizard-steps-col">
-                <h3>✅ Lista de Verificación TikTok (4 pasos rápidos)</h3>
-
-                <!-- PASO 1 -->
-                <div class="step-card" id="card-tiktok-step1">
-                  <div class="step-header">
-                    <label class="step-check-label">
-                      <input type="checkbox" id="chkTikTokStep1" class="wizard-checkbox" checked />
-                      <span class="step-num">Paso 1</span>
-                      <strong>Crear la App en TikTok for Developers</strong>
-                    </label>
-                    <a href="https://developers.tiktok.com/" target="_blank" rel="noopener" class="btn-link">
-                      Abrir TikTok Developers ↗
-                    </a>
-                  </div>
-                  <ol class="step-instructions">
-                    <li>Ya creaste tu App <strong>SHEEP 100</strong> en TikTok for Developers.</li>
-                    <li>Tu cuenta <strong>@cocuyo.grafic</strong> ya está vinculada en la sección Sandbox.</li>
-                  </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Tu app figura con el badge "Sandbox" activo.
-                  </div>
-                </div>
-
-                <!-- PASO 2 -->
-                <div class="step-card" id="card-tiktok-step2">
-                  <div class="step-header">
-                    <label class="step-check-label">
-                      <input type="checkbox" id="chkTikTokStep2" class="wizard-checkbox" checked />
-                      <span class="step-num">Paso 2</span>
-                      <strong>Configurar Login Kit y Content Posting API</strong>
-                    </label>
-                  </div>
-                  <ol class="step-instructions">
-                    <li>En <em>Login Kit → Web</em> asegúrate de tener agregada esta Redirect URI: <code>https://juznald-cyber.github.io/SHEEP-100/</code> <button type="button" class="btn-outline btn-xs" onclick="navigator.clipboard.writeText('https://juznald-cyber.github.io/SHEEP-100/'); showToast('📋 Redirect URI copiada al portapapeles');" style="margin-left:6px;padding:2px 8px;font-size:0.72rem;">Copiar</button></li>
-                    <li>En <em>Content Posting API</em> activaste <strong>Direct Post</strong> en verde.</li>
-                    <li>En <em>Scopes</em> marcaste: <code>video.upload</code>, <code>video.publish</code> y <code>user.info.basic</code>.</li>
-                  </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Todos los cambios fueron aplicados ("Apply changes").
-                  </div>
-                </div>
-
-                <!-- PASO 3 -->
-                <div class="step-card" id="card-tiktok-step3">
-                  <div class="step-header">
-                    <label class="step-check-label">
-                      <input type="checkbox" id="chkTikTokStep3" class="wizard-checkbox" />
-                      <span class="step-num">Paso 3</span>
-                      <strong>Copiar Client Key y Client Secret</strong>
-                    </label>
-                  </div>
-                  <ol class="step-instructions">
-                    <li>En TikTok Developers ve al menú izquierdo a <strong>App details</strong>.</li>
-                    <li>Copia tu <strong>Client Key</strong> y tu <strong>Client Secret</strong> (haz clic en Mostrar / Show).</li>
-                    <li>Pégalos en el panel de la derecha 👉.</li>
-                  </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Las credenciales están listas en SHEEP 100.
-                  </div>
-                </div>
-
-                <!-- PASO 4 -->
-                <div class="step-card" id="card-tiktok-step4">
-                  <div class="step-header">
-                    <label class="step-check-label">
-                      <input type="checkbox" id="chkTikTokStep4" class="wizard-checkbox" />
-                      <span class="step-num">Paso 4</span>
-                      <strong>Conectar y Autorizar</strong>
-                    </label>
-                  </div>
-                  <ol class="step-instructions">
-                    <li>Haz clic en el botón <strong>"🔗 Autorizar con TikTok"</strong> para vincular tu sesión.</li>
-                    <li>O si prefieres, ingresa tu Access Token de Sandbox directamente.</li>
-                    <li>Guarda la configuración para sincronizarla en la Nube.</li>
-                  </ol>
-                  <div class="step-verify">
-                    ✔ <strong>Verificación:</strong> Estado cambia a <em>Conectado: @cocuyo.grafic</em>.
-                  </div>
-                </div>
-              </div>
-
-              <!-- Columna Derecha: Panel de Credenciales TikTok -->
-              <div class="wizard-config-col">
-                <div class="card">
-                  <h3>🔑 Conexión TikTok Content Posting API</h3>
-                  <p class="muted-text">
-                    Ingresa tus credenciales obtenidas en TikTok Developers para habilitar la auto-publicación de videos.
-                  </p>
-
-                  <form id="formTikTokConfig" class="wizard-config-form" onsubmit="event.preventDefault(); return window.saveTikTokConfigDirect ? window.saveTikTokConfigDirect(event) : false;">
-                    <label>TikTok Client Key</label>
-                    <input type="text" id="cfgTikTokClientKey" placeholder="Pega aquí tu Client Key copiado de TikTok" required />
-
-                    <label>TikTok Client Secret</label>
-                    <input type="password" id="cfgTikTokClientSecret" placeholder="Pega aquí tu Client Secret copiado de TikTok" required />
-
-                    <label>Usuario de TikTok</label>
-                    <input type="text" id="cfgTikTokUsername" placeholder="@cocuyo.grafic" value="@cocuyo.grafic" />
-
-                    <label>TikTok Access Token (Opcional / Token Directo)</label>
-                    <textarea id="cfgTikTokAccessToken" rows="2" placeholder="act.example_access_token..."></textarea>
-
-                    <div class="form-row-2" style="margin-top:10px;">
-                      <a id="btnTikTokOAuth" href="https://www.tiktok.com/v2/auth/authorize/?client_key=sbawbyxlo8yktgrxxv&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=https%3A%2F%2Fjuznald-cyber.github.io%2FSHEEP-100%2F&state=sheep100" class="btn-outline full-width" style="text-align:center;text-decoration:none;display:inline-block;padding:9px 12px;font-weight:600;box-sizing:border-box;" onclick="return window.handleTikTokLinkClick ? window.handleTikTokLinkClick(event, this) : true;">
-                        🔗 Autorizar con TikTok (OAuth)
-                      </a>
-                      <button type="button" class="btn-primary full-width" id="btnSaveTikTok" onclick="return window.saveTikTokConfigDirect ? window.saveTikTokConfigDirect(event) : false;">
-                        💾 Guardar TikTok
-                      </button>
-                    </div>
-                    <div style="text-align:center;margin-top:8px;">
-                      <a id="linkTikTokNewTab" href="https://www.tiktok.com/v2/auth/authorize/?client_key=sbawbyxlo8yktgrxxv&scope=user.info.basic,video.upload,video.publish&response_type=code&redirect_uri=https%3A%2F%2Fjuznald-cyber.github.io%2FSHEEP-100%2F&state=sheep100" target="_blank" rel="noopener" style="font-size:0.75rem;color:#60a5fa;text-decoration:underline;">
-                        ↗ Si no te abre automáticamente, haz clic aquí para abrir TikTok en nueva pestaña
-                      </a>
-                    </div>
-
-                    <div style="background:rgba(239,68,68,0.1);border:1px solid #ef4444;border-radius:8px;padding:10px;margin-top:12px;font-size:0.8rem;line-height:1.4;color:#fca5a5;">
-                      <strong>⚠️ IMPORTANTE en TikTok Developers:</strong> Cuando agregues la Redirect URI o el Target user, recuerda hacer clic en el botón rojo <strong>"Apply changes"</strong> arriba a la derecha en TikTok Developers para que surtan efecto.
-                    </div>
-
-                    <div id="tiktokVerifyFeedback" class="verify-feedback hidden" style="margin-top:12px;"></div>
-                  </form>
-                </div>
-
-                <div class="card code-preview-card">
-                  <h3>⚙️ Flujo Oficial TikTok Content Posting API</h3>
-                  <p class="muted-text">
-                    TikTok publica videos MP4 mediante la API <code>/v2/post/publish/video/init/</code>:
-                  </p>
-                  <pre class="code-block">// Petición directa a TikTok Content Posting API
-POST https://open.tiktokapis.com/v2/post/publish/video/init/
-Headers: {
-  Authorization: "Bearer act.tiktok_token...",
-  "Content-Type": "application/json"
-}
-Body: {
-  post_info: {
-    title: "Tu copy con #hashtags",
-    privacy_level: "PUBLIC_TO_EVERYONE"
-  },
-  source_info: {
-    source: "PULL_FROM_URL",
-    video_url: "https://tu-servidor.com/video.mp4"
-  }
-}</pre>
+Body: { creation_id: "ID_CONTENEDOR" }</pre>
                 </div>
               </div>
             </div>
@@ -852,40 +770,71 @@ Body: {
         </button>
         <button class="bottom-nav-item" data-tab="grid">
           <span>📱</span>
-          <small>Feed Grid</small>
+          <small>Feed/Story</small>
+        </button>
+        <button class="bottom-nav-item" data-tab="metrics">
+          <span>📊</span>
+          <small>Métricas</small>
         </button>
         <button class="bottom-nav-item" data-tab="media">
           <span>🖼️</span>
           <small>Medios</small>
         </button>
-        <button class="bottom-nav-item" data-tab="ai">
-          <span>✨</span>
-          <small>IA Copies</small>
-        </button>
         <button class="bottom-nav-item" data-tab="meta-wizard">
           <span>🧭</span>
-          <small>Meta</small>
-        </button>
-        <button class="bottom-nav-item" data-tab="tiktok-wizard">
-          <span>🎵</span>
-          <small>TikTok</small>
+          <small>Meta API</small>
         </button>
       </nav>
     </div>
   </div>
 
   <!-- ==========================================
-       MODAL: CREAR / EDITAR PUBLICACIÓN
+       MODAL: CREAR / EDITAR POST O HISTORIA
        ========================================== -->
   <div class="modal-backdrop hidden" id="composerModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 id="composerModalTitle">✨ Programar Publicación</h3>
+        <h3 id="composerModalTitle">✨ Programar Publicación o Historia</h3>
         <button class="btn-close" id="btnCloseComposer">✕</button>
       </div>
 
       <form id="formPostComposer" class="composer-form">
         <input type="hidden" id="postId" />
+
+        <!-- SELECTOR DESTACADO: POST NORMAL vs HISTORIA (STORY) vs REEL -->
+        <label style="margin-bottom:6px;">¿Qué tipo de contenido deseas programar?</label>
+        <div class="format-selector-cards" id="formatSelectorCards">
+          <label class="format-choice active" data-format-card="POST">
+            <input type="radio" name="postFormatRadio" value="POST" checked />
+            <span class="format-icon">📸</span>
+            <div>
+              <strong>Post Normal (Feed)</strong>
+              <small>Cuadrícula permanente (1:1 o 4:5)</small>
+            </div>
+          </label>
+
+          <label class="format-choice story-choice" data-format-card="STORY">
+            <input type="radio" name="postFormatRadio" value="STORY" />
+            <span class="format-icon">⭕</span>
+            <div>
+              <strong>Historia / Story (24h)</strong>
+              <small>Vertical 9:16 • Se publica en tus Historias</small>
+            </div>
+          </label>
+
+          <label class="format-choice" data-format-card="REEL">
+            <input type="radio" name="postFormatRadio" value="REEL" />
+            <span class="format-icon">🎬</span>
+            <div>
+              <strong>Reel (Video)</strong>
+              <small>Video vertical MP4 en pestaña Reels</small>
+            </div>
+          </label>
+        </div>
+
+        <div id="storyHelperNotice" class="story-notice-banner hidden">
+          ⭕ <strong>Modo Historia (Story 24h) activo:</strong> Meta publicará esta imagen (JPG) o video (MP4) directamente en el anillo de Historias de tu cuenta de Instagram Business usando <code>media_type=STORIES</code>.
+        </div>
 
         <div class="composer-grid">
           <!-- Left: Media Selection & Preview -->
@@ -903,17 +852,18 @@ Body: {
             <label>URL Pública para Meta Graph API (https://...jpg o .mp4)</label>
             <input type="url" id="postPublicMediaUrl" placeholder="https://images.unsplash.com/..." required />
 
-            <label>Formato de Publicación en Instagram</label>
+            <label>Tipo de Archivo</label>
             <select id="postMediaType">
-              <option value="IMAGE">📸 Imagen Feed (JPG)</option>
-              <option value="REELS">🎬 Video Reels (MP4)</option>
+              <option value="IMAGE">📸 Imagen JPG (Feed o Historia)</option>
+              <option value="STORIES">⭕ Historia 24h (Imagen JPG o Video MP4)</option>
+              <option value="REELS">🎬 Video MP4 (Reels)</option>
             </select>
           </div>
 
           <!-- Right: Copy, Platforms & Schedule -->
           <div class="composer-details-col">
             <label>Título interno de referencia</label>
-            <input type="text" id="postTitle" placeholder="Ej: Post Lanzamiento Lunes" required />
+            <input type="text" id="postTitle" placeholder="Ej: Historia Oferta Relámpago / Post Lunes" required />
 
             <label>Redes Sociales Destino</label>
             <div class="platform-checks">
@@ -925,21 +875,17 @@ Body: {
                 <input type="checkbox" name="postPlatform" value="facebook" />
                 <span>📘 Facebook Page</span>
               </label>
-              <label class="plat-pill">
-                <input type="checkbox" name="postPlatform" value="tiktok" />
-                <span>🎵 TikTok (Direct Post)</span>
-              </label>
             </div>
 
             <div class="caption-label-row">
-              <label>Copy / Descripción y Hashtags</label>
+              <label id="captionFieldLabel">Copy / Descripción (o Notas para tu Historia)</label>
               <span class="char-counter" id="captionCharCounter">0 / 2200</span>
             </div>
-            <textarea id="postCaption" rows="5" placeholder="Escribe tu copy aquí o genéralo en el Estudio IA..." required></textarea>
+            <textarea id="postCaption" rows="4" placeholder="Escribe tu copy aquí o notas de texto para acompañar tu Historia..." required></textarea>
 
             <div class="quick-hashtag-bar" id="composerHashtagPills"></div>
 
-            <label>Primer Comentario Automático (Opcional en Instagram)</label>
+            <label id="firstCommentLabel">Primer Comentario Automático / Sticker Link de referencia</label>
             <input type="text" id="postFirstComment" placeholder="Ej: ¡Link directo en nuestra biografía!" />
 
             <div class="form-row-2">
@@ -1010,6 +956,6 @@ Body: {
   <!-- TOAST NOTIFICATION -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="./app.js?v=3.2"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

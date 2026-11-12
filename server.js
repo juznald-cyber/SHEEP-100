@@ -435,16 +435,27 @@ async function publishToMetaInstagram(post, metaConfig) {
   // Real 2-Step Meta Graph API Call
   const graphBase = 'https://graph.facebook.com/v21.0';
 
-  // STEP 1: Create Media Container
+  // STEP 1: Create Media Container (Supports Feed IMAGE, REELS, and 24h STORIES)
   const containerParams = new URLSearchParams();
-  containerParams.append('caption', post.caption || '');
   containerParams.append('access_token', accessToken);
 
-  if (post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+  const isStory = post.postFormat === 'STORY' || post.mediaType === 'STORIES';
+  const isVideoFile = /\.mp4(\?|$)/i.test(mediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
+
+  if (isStory) {
+    containerParams.append('media_type', 'STORIES');
+    if (isVideoFile) {
+      containerParams.append('video_url', mediaUrl);
+    } else {
+      containerParams.append('image_url', mediaUrl);
+    }
+  } else if (post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
     containerParams.append('media_type', 'REELS');
     containerParams.append('video_url', mediaUrl);
+    containerParams.append('caption', post.caption || '');
   } else {
     containerParams.append('image_url', mediaUrl);
+    containerParams.append('caption', post.caption || '');
   }
 
   const step1Res = await fetch(`${graphBase}/${igUserId}/media`, {
@@ -463,17 +474,17 @@ async function publishToMetaInstagram(post, metaConfig) {
 
   const creationId = step1Data.id;
 
-  // If video/Reels, wait briefly or poll status_code
-  if (post.mediaType === 'REELS' || post.mediaType === 'VIDEO') {
+  // If video/Reels or Story, wait briefly or poll status_code
+  if (isStory || isVideoFile) {
     for (let attempt = 0; attempt < 5; attempt++) {
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 2500));
       const statusRes = await fetch(
         `${graphBase}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
       );
       const statusData = await statusRes.json();
       if (statusData.status_code === 'FINISHED') break;
       if (statusData.status_code === 'ERROR') {
-        throw new Error(`Meta rechazó el procesamiento del video: ${statusData.status || 'Formato no compatible'}`);
+        throw new Error(`Meta rechazó el procesamiento del archivo: ${statusData.status || 'Formato no compatible'}`);
       }
     }
   }
@@ -641,7 +652,7 @@ app.delete('/api/media/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Create or update a Post
+// Create or update a Post or Story
 app.post('/api/posts', (req, res) => {
   const db = readDb();
   const {
@@ -652,10 +663,12 @@ app.post('/api/posts', (req, res) => {
     mediaUrl,
     publicMediaUrl,
     mediaType,
+    postFormat,
     platforms,
     status,
     scheduledAt,
-    firstComment
+    firstComment,
+    metrics
   } = req.body;
 
   if (id) {
@@ -670,10 +683,12 @@ app.post('/api/posts', (req, res) => {
       mediaUrl: mediaUrl ?? existing.mediaUrl,
       publicMediaUrl: publicMediaUrl ?? existing.publicMediaUrl,
       mediaType: mediaType ?? existing.mediaType,
+      postFormat: postFormat ?? existing.postFormat ?? 'POST',
       platforms: platforms ?? existing.platforms,
       status: status ?? existing.status,
       scheduledAt: scheduledAt ?? existing.scheduledAt,
       firstComment: firstComment ?? existing.firstComment,
+      metrics: metrics ?? existing.metrics,
       logs: [
         ...(existing.logs || []),
         {
@@ -696,6 +711,7 @@ app.post('/api/posts', (req, res) => {
     mediaUrl: mediaUrl || '',
     publicMediaUrl: publicMediaUrl || mediaUrl || '',
     mediaType: mediaType || 'IMAGE',
+    postFormat: postFormat || (mediaType === 'STORIES' ? 'STORY' : mediaType === 'REELS' ? 'REEL' : 'POST'),
     platforms: Array.isArray(platforms) && platforms.length ? platforms : ['instagram'],
     status: status || 'scheduled',
     scheduledAt: scheduledAt || new Date(Date.now() + 3600 * 1000).toISOString(),
