@@ -244,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   checkSavedSession();
   checkTikTokOAuthCallback();
 
+  setTimeout(runBrowserAutoScheduler, 1500);
   setInterval(runBrowserAutoScheduler, 25000);
 });
 
