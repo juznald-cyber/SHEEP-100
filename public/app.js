@@ -231,6 +231,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInterval(runBrowserAutoScheduler, 25000);
 });
 
+function extractGoogleDriveId(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m1 = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  if (m1) return m1[1];
+  const m2 =
+    url.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?[^#]*?[?&]id=([a-zA-Z0-9_-]+)/i) ||
+    url.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?id=([a-zA-Z0-9_-]+)/i);
+  if (m2) return m2[1];
+  const m3 = url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
+  if (m3) return m3[1];
+  const m4 = url.match(/drive\.usercontent\.google\.com\/download\?[^#]*?id=([a-zA-Z0-9_-]+)/i);
+  if (m4) return m4[1];
+  return null;
+}
+
+function normalizeCloudMedia(rawUrl, type = 'image') {
+  const clean = (rawUrl || '').trim();
+  const driveId = extractGoogleDriveId(clean);
+  if (driveId) {
+    // Google CDN direct thumbnail/image stream (works in <img> and Meta Graph API image_url)
+    const thumbUrl = `https://lh3.googleusercontent.com/d/${driveId}=w1080`;
+    const directPublicUrl =
+      type === 'video'
+        ? `https://drive.usercontent.google.com/download?id=${driveId}&export=download&confirm=t`
+        : thumbUrl;
+    return {
+      isDrive: true,
+      driveId,
+      thumbUrl,
+      publicUrl: directPublicUrl
+    };
+  }
+  if (/dropbox\.com\//i.test(clean)) {
+    const directDropbox = clean.replace(/\?dl=0$/i, '?raw=1').replace(/&dl=0/i, '&raw=1');
+    return {
+      isDrive: false,
+      driveId: null,
+      thumbUrl: directDropbox,
+      publicUrl: directDropbox
+    };
+  }
+  return {
+    isDrive: false,
+    driveId: null,
+    thumbUrl: clean,
+    publicUrl: clean
+  };
+}
+
 function ensureSampleStoryExists() {
   const defCfg = getDefaultInitialState().metaConfig;
   appState.metaConfig = appState.metaConfig || {};
@@ -249,8 +298,33 @@ function ensureSampleStoryExists() {
     appState.metaConfig.accessToken = defCfg.accessToken;
   }
 
+  // Normalizar automáticamente enlaces de Google Drive / Dropbox en Media Library
+  if (Array.isArray(appState.mediaLibrary)) {
+    appState.mediaLibrary.forEach((m) => {
+      const sourceUrl = m.originalUrl || m.publicUrl || m.url || '';
+      const norm = normalizeCloudMedia(sourceUrl, m.type);
+      if (norm.isDrive) {
+        m.driveId = norm.driveId;
+        m.url = norm.thumbUrl;
+        // El archivo 1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6 (PRUEBA MILAN) en Drive es un JPG real
+        if (norm.driveId === '1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6') {
+          m.type = 'image';
+          m.format = 'JPG';
+          m.publicUrl = norm.thumbUrl;
+        } else {
+          m.publicUrl = norm.publicUrl;
+        }
+      }
+    });
+  }
+
   if (!Array.isArray(appState.posts)) return;
   appState.posts.forEach((p, idx) => {
+    const norm = normalizeCloudMedia(p.publicMediaUrl || p.mediaUrl || '', p.mediaType === 'REELS' || p.mediaType === 'VIDEO' ? 'video' : 'image');
+    if (norm.isDrive) {
+      p.mediaUrl = norm.thumbUrl;
+      p.publicMediaUrl = norm.driveId === '1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6' ? norm.thumbUrl : norm.publicUrl;
+    }
     if (!p.postFormat) {
       p.postFormat = p.mediaType === 'STORIES' ? 'STORY' : p.mediaType === 'REELS' ? 'REEL' : 'POST';
     }
@@ -957,7 +1031,10 @@ async function executeMetaPublishFlow(post) {
   const cfg = appState.metaConfig || {};
   const accessToken = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
-  const mediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const isVideoHint = /\.mp4(\?|$)/i.test(rawMediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
+  const norm = normalizeCloudMedia(rawMediaUrl, isVideoHint ? 'video' : 'image');
+  const mediaUrl = norm.publicUrl || rawMediaUrl;
   const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
   const storyMode = isPostStory(post);
 
@@ -1630,7 +1707,7 @@ function initMediaUploadEvents() {
   const formUrl = document.getElementById('formAddUrl');
   formUrl.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const url = document.getElementById('inputMediaUrl').value.trim();
+    const rawUrl = document.getElementById('inputMediaUrl').value.trim();
     const title = document.getElementById('inputMediaTitle').value.trim();
     const type = document.getElementById('inputMediaType').value;
     const tags = (document.getElementById('inputMediaTags').value || 'url-publica')
@@ -1638,14 +1715,18 @@ function initMediaUploadEvents() {
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const norm = normalizeCloudMedia(rawUrl, type);
+
     const newMedia = {
       id: `media-${Date.now()}`,
       title,
-      url,
-      publicUrl: url,
+      originalUrl: rawUrl,
+      driveId: norm.driveId || null,
+      url: norm.thumbUrl,
+      publicUrl: norm.publicUrl,
       type,
       format: type === 'video' ? 'MP4' : 'JPG',
-      tags,
+      tags: norm.isDrive && !tags.includes('google-drive') ? [...tags, 'google-drive'] : tags,
       createdAt: new Date().toISOString()
     };
 
@@ -1653,7 +1734,11 @@ function initMediaUploadEvents() {
     formUrl.reset();
     renderAll();
     await saveStateEverywhere(true);
-    showToast('🌐 Recurso con URL pública guardado en la nube');
+    showToast(
+      norm.isDrive
+        ? '✅ Archivo de Google Drive convertido automáticamente a enlace directo y guardado'
+        : '🌐 Recurso con URL pública guardado en la nube'
+    );
   });
 
   document.getElementById('mediaSearchInput').addEventListener('input', renderMediaGallery);
@@ -1674,14 +1759,23 @@ function renderMediaGallery() {
   countLabel.textContent = items.length;
 
   grid.innerHTML = items
-    .map(
-      (m) => `
+    .map((m) => {
+      const norm = normalizeCloudMedia(m.originalUrl || m.url || m.publicUrl || '', m.type);
+      const displayThumb = norm.thumbUrl || m.url || './icon.svg';
+      const isDirectVideoFile =
+        m.type === 'video' && !norm.isDrive && /\.(mp4|webm|mov)(\?|$)/i.test(displayThumb);
+
+      const mediaPreviewHtml = isDirectVideoFile
+        ? `<video src="${escapeHtml(displayThumb)}" class="media-card-thumb" muted playsinline preload="metadata" onmouseover="this.play()" onmouseout="this.pause()"></video>`
+        : `<img src="${escapeHtml(displayThumb)}" class="media-card-thumb" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './icon.svg'}';}else{this.src='./icon.svg';}" />`;
+
+      return `
       <div class="media-card">
-        <img src="${m.url}" class="media-card-thumb" alt="${escapeHtml(m.title)}" />
+        ${mediaPreviewHtml}
         <div class="media-card-body">
           <strong>${escapeHtml(m.title)}</strong>
           <div style="font-size:0.72rem;color:var(--text-muted);">
-            Formato: <b>${m.format}</b> • ${m.publicUrl ? '🌐 URL Pública' : '☁️ En Nube'}
+            Formato: <b>${m.format}</b> • ${norm.isDrive ? '📁 Google Drive Directo' : m.publicUrl ? '🌐 URL Pública' : '☁️ En Nube'}
           </div>
           <div style="display:flex;gap:5px;margin-top:6px;">
             <button class="btn-primary btn-sm" style="flex:1;" onclick="openComposerModal({ mediaId: '${m.id}', defaultFormat: 'POST' })">
@@ -1694,8 +1788,8 @@ function renderMediaGallery() {
           </div>
         </div>
       </div>
-    `
-    )
+    `;
+    })
     .join('');
 }
 
@@ -2292,10 +2386,12 @@ function updateComposerPreview(url) {
     box.innerHTML = `<span>Selecciona un medio o pega una URL</span>`;
     return;
   }
-  if (/\.mp4(\?|$)/i.test(url)) {
-    box.innerHTML = `<video src="${escapeHtml(url)}" controls muted></video>`;
+  const norm = normalizeCloudMedia(url, 'image');
+  const displayUrl = norm.thumbUrl || url;
+  if (!norm.isDrive && /\.mp4(\?|$)/i.test(displayUrl)) {
+    box.innerHTML = `<video src="${escapeHtml(displayUrl)}" controls muted></video>`;
   } else {
-    box.innerHTML = `<img src="${escapeHtml(url)}" alt="Preview" />`;
+    box.innerHTML = `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Preview" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './icon.svg'}';}" />`;
   }
 }
 

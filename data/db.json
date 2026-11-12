@@ -7,6 +7,7 @@
     "igUsername": "cocuyografic",
     "fbPageId": "102786358439057",
     "fbPageName": "Cocuyo Grafic",
+    "followersCount": 199,
     "autoPublishEnabled": true,
     "simulationFallback": true,
     "geminiApiKey": "",
@@ -16,22 +17,13 @@
       "step3_testerRole": true,
       "step4_linkFbPage": true,
       "step5_accessToken": true
-    },
-    "followersCount": 199
-  },
-  "tiktokConfig": {
-    "clientKey": "sbawbyxlo8yktgrxxv",
-    "clientSecret": "f8uJj4Jk6CUKlGrcKbd7NuwxdDihu0zE",
-    "accessToken": "",
-    "openId": "",
-    "username": "@cocuyo.grafic",
-    "connected": false
+    }
   },
   "hashtagGroups": [
     {
       "id": "hg-1",
       "name": "Emprendimiento & Negocios",
-      "tags": "#emprendedores #negociosdigitales #marketingdigital #marcaPersonal #exito #productividad #estrategiadigital"
+      "tags": "#sheep100 #emprendedores #negociosdigitales #marketingdigital #marcaPersonal #exito #productividad"
     },
     {
       "id": "hg-2",
@@ -46,6 +38,20 @@
   ],
   "mediaLibrary": [
     {
+      "id": "media-1794489244212",
+      "title": "PRUEBA MILAN",
+      "url": "https://lh3.googleusercontent.com/d/1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6=w1080",
+      "publicUrl": "https://lh3.googleusercontent.com/d/1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6=w1080",
+      "type": "image",
+      "format": "JPG",
+      "tags": [
+        "url-publica"
+      ],
+      "createdAt": "2026-11-12T13:14:04.212Z",
+      "originalUrl": "https://drive.google.com/file/d/1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6/view?usp=drive_link",
+      "driveId": "1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6"
+    },
+    {
       "id": "media-1",
       "title": "Lanzamiento Café Especialidad.jpg",
       "url": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
@@ -57,7 +63,7 @@
         "lanzamiento",
         "destacado"
       ],
-      "createdAt": "2026-11-07T16:13:26.637Z"
+      "createdAt": "2026-11-09T12:46:30.460Z"
     },
     {
       "id": "media-2",
@@ -70,7 +76,7 @@
         "detrasdecamaras",
         "oficina"
       ],
-      "createdAt": "2026-11-08T16:13:26.637Z"
+      "createdAt": "2026-11-10T12:46:30.460Z"
     },
     {
       "id": "media-3",
@@ -83,51 +89,85 @@
         "branding",
         "lifestyle"
       ],
-      "createdAt": "2026-11-09T16:13:26.637Z"
+      "createdAt": "2026-11-11T12:46:30.460Z"
     },
     {
       "id": "media-4",
-      "title": "Diseño Creativo Studio.jpg",
+      "title": "Historia Detrás de Cámaras 9x16.jpg",
       "url": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
       "publicUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
       "type": "image",
       "format": "JPG",
       "tags": [
+        "historia",
         "equipo",
-        "comunidad"
+        "story"
       ],
-      "createdAt": "2026-11-10T16:13:26.638Z"
+      "createdAt": "2026-11-12T12:46:30.460Z"
     }
   ],
   "posts": [
     {
-      "id": "post-1",
-      "title": "5 Secretos para automatizar tus redes",
-      "caption": "¿Pasas horas pensando qué publicar cada día? 🚀\n\nCon nuestro nuevo flujo de planificación visual puedes dejar lista toda tu semana en 15 minutos.\n\n✅ Organiza tu cuadrícula visual\n✅ Genera copies magnéticos con IA\n✅ Publica automáticamente con Meta Graph API\n\nGuarda este post para aplicarlo hoy mismo 👇\n\n#marketingdigital #automatizacion #emprendedores #redesSociales",
-      "mediaId": "media-2",
-      "mediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
-      "publicMediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
-      "mediaType": "IMAGE",
+      "id": "post-story-1",
+      "title": "Historia: Encuesta & Oferta Flash 24h",
+      "caption": "🔥 ¡Solo por las próximas 24 horas! Responde \"QUIERO\" a esta historia para recibir acceso anticipado.",
+      "mediaId": "media-4",
+      "mediaUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
+      "publicMediaUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
+      "mediaType": "STORIES",
+      "postFormat": "STORY",
       "platforms": [
         "instagram",
         "facebook"
       ],
-      "status": "published",
-      "scheduledAt": "2026-11-11T21:00:00.000Z",
-      "firstComment": "¿Cuál es la red social que más tiempo te consume? ¡Te leemos!",
-      "gridOrder": 1,
-      "createdAt": "2026-11-10T16:13:26.637Z",
+      "status": "scheduled",
+      "scheduledAt": "2026-11-12T16:46:30.460Z",
+      "firstComment": "Sticker de enlace: https://sheep-100-b8a90.web.app",
+      "gridOrder": 0,
+      "metrics": {
+        "reach": 1840,
+        "likes": 142,
+        "comments": 38,
+        "saves": 64
+      },
+      "createdAt": "2026-11-12T12:46:30.460Z",
       "logs": [
         {
-          "time": "2026-11-10T16:13:26.637Z",
-          "message": "Publicación programada en cola automática."
-        },
-        {
-          "time": "2026-11-11T22:37:52.678Z",
-          "message": "[Auto] 📸 Publicado en Modo Simulación (Configura tu Token en \"Paso a Paso Meta\" para envío real a Instagram). • 📘 Crossposting automático activado vía Instagram a Facebook Page"
+          "time": "2026-11-12T12:46:30.460Z",
+          "message": "Historia (24h) programada para publicación automática."
         }
+      ]
+    },
+    {
+      "id": "post-1",
+      "title": "5 Secretos para automatizar tus redes con SHEEP 100",
+      "caption": "¿Pasas horas pensando qué publicar cada día? 🚀\n\nCon SHEEP 100 puedes dejar lista toda tu semana de Posts e Historias en 15 minutos.\n\n✅ Organiza tu cuadrícula visual\n✅ Programa Historias 24h automáticamente\n✅ Revisa tus métricas en tiempo real\n\n#sheep100 #marketingdigital #automatizacion #emprendedores",
+      "mediaId": "media-2",
+      "mediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "publicMediaUrl": "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1080&q=85",
+      "mediaType": "IMAGE",
+      "postFormat": "POST",
+      "platforms": [
+        "instagram",
+        "facebook"
       ],
-      "publishedAt": "2026-11-11T22:37:52.678Z"
+      "status": "scheduled",
+      "scheduledAt": "2026-11-13T21:00:00.000Z",
+      "firstComment": "¿Cuál es la red social que más tiempo te consume? ¡Te leemos!",
+      "gridOrder": 1,
+      "metrics": {
+        "reach": 3420,
+        "likes": 285,
+        "comments": 47,
+        "saves": 112
+      },
+      "createdAt": "2026-11-12T12:46:30.460Z",
+      "logs": [
+        {
+          "time": "2026-11-12T12:46:30.460Z",
+          "message": "Publicación programada en cola automática."
+        }
+      ]
     },
     {
       "id": "post-2",
@@ -137,344 +177,60 @@
       "mediaUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
       "publicMediaUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1080&q=85",
       "mediaType": "IMAGE",
+      "postFormat": "POST",
       "platforms": [
         "instagram"
       ],
       "status": "scheduled",
-      "scheduledAt": "2026-11-12T15:30:00.000Z",
+      "scheduledAt": "2026-11-14T15:30:00.000Z",
       "firstComment": "",
       "gridOrder": 2,
-      "createdAt": "2026-11-10T16:13:26.637Z",
+      "metrics": {
+        "reach": 2890,
+        "likes": 219,
+        "comments": 31,
+        "saves": 78
+      },
+      "createdAt": "2026-11-12T12:46:30.460Z",
       "logs": [
         {
-          "time": "2026-11-10T16:13:26.637Z",
+          "time": "2026-11-12T12:46:30.460Z",
           "message": "Publicación programada para Instagram Feed."
         }
       ]
     },
     {
       "id": "post-3",
-      "title": "Bienvenidos a nuestra nueva etapa",
-      "caption": "Construyendo el futuro de nuestra marca paso a paso. Gracias por acompañarnos en este viaje 🙌🔥\n\n#marcaPersonal #negocios #exito",
+      "title": "Bienvenidos a SHEEP 100",
+      "caption": "Construyendo el futuro de nuestra marca paso a paso. Gracias por acompañarnos en este viaje 🙌🔥\n\n#sheep100 #marcaPersonal #negocios #exito",
       "mediaId": "media-3",
       "mediaUrl": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
       "publicMediaUrl": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1080&q=85",
       "mediaType": "IMAGE",
+      "postFormat": "POST",
       "platforms": [
         "instagram",
-        "tiktok"
+        "facebook"
       ],
       "status": "published",
-      "scheduledAt": "2026-11-09T18:00:00.000Z",
-      "publishedAt": "2026-11-09T18:00:00.000Z",
+      "scheduledAt": "2026-11-11T18:00:00.000Z",
+      "publishedAt": "2026-11-11T18:00:00.000Z",
       "firstComment": "",
       "gridOrder": 3,
-      "createdAt": "2026-11-09T18:00:00.000Z",
-      "logs": [
-        {
-          "time": "2026-11-09T18:00:00.000Z",
-          "message": "Publicado exitosamente (Contenedor Meta ID: 17895695668004550)."
-        }
-      ]
-    },
-    {
-      "id": "ig-17927584590214338",
-      "metaPublishId": "17927584590214338",
-      "title": "No mas ropa sin mensaje, viste tu fe✨",
-      "caption": "No mas ropa sin mensaje, viste tu fe✨",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/628851548_18097898165485086_1840410536588647462_n.heic?stp=dst-jpg_e35_tt6&_nc_cat=100&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeF53jhU03hp1ASpohNaRZQIXljQitb1-2VeWNCK1vX7ZZNde3MiOBBVFBR3u-1p6EA&_nc_ohc=XSpGpU5n72sQ7kNvwEDt_lI&_nc_oc=Adr9J1M0tIK32R0rIt9SvM33iliNl-v7PvOMOHzVzzcljAM6Mcld7e67M_lqi8MUpLA&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTP6lAFMA14v1ZTFsf0FkfhZcuOYI3VNVi0qeL-3fp7Mw&oe=6AFB816C",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/628851548_18097898165485086_1840410536588647462_n.heic?stp=dst-jpg_e35_tt6&_nc_cat=100&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeF53jhU03hp1ASpohNaRZQIXljQitb1-2VeWNCK1vX7ZZNde3MiOBBVFBR3u-1p6EA&_nc_ohc=XSpGpU5n72sQ7kNvwEDt_lI&_nc_oc=Adr9J1M0tIK32R0rIt9SvM33iliNl-v7PvOMOHzVzzcljAM6Mcld7e67M_lqi8MUpLA&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTP6lAFMA14v1ZTFsf0FkfhZcuOYI3VNVi0qeL-3fp7Mw&oe=6AFB816C",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2026-02-15T19:00:30+0000",
-      "publishedAt": "2026-02-15T19:00:30+0000",
-      "gridOrder": 10,
       "metrics": {
-        "reach": 180,
-        "likes": 4,
-        "comments": 0,
-        "saves": 1
+        "reach": 4680,
+        "likes": 412,
+        "comments": 64,
+        "saves": 155
       },
+      "createdAt": "2026-11-11T18:00:00.000Z",
       "logs": [
         {
-          "time": "2026-11-12T13:01:04.150Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-18003123875845647",
-      "metaPublishId": "18003123875845647",
-      "title": "No es solo una polera... Es un mensaje, es fe, e",
-      "caption": "No es solo una polera... Es un mensaje, es fe, es identidad y propósito🙌🏻 \n#jovenescristianos \n#polera",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/629027497_18097895573485086_2188989330565002793_n.heic?stp=dst-jpg_e35_tt6&_nc_cat=106&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeE6U0ZjcexLtZbElSQq0Tw6RWiwUAtjat9FaLBQC2Nq3895lOwSTWoyzYUQxnlc2Vw&_nc_ohc=xSAg51Th1YgQ7kNvwF1UuEa&_nc_oc=AdqQd8pl5iHkcAPQ0J0lGkW--VqsQTE-P3CJMEuRlzvXt2HnTMbr64-BP2WlzjOhRGc&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQSAlMOBRQ157ftuhChcGh1DWlYYTUx8U0aI8rCSb5wHug&oe=6AFB7F95",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/629027497_18097895573485086_2188989330565002793_n.heic?stp=dst-jpg_e35_tt6&_nc_cat=106&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeE6U0ZjcexLtZbElSQq0Tw6RWiwUAtjat9FaLBQC2Nq3895lOwSTWoyzYUQxnlc2Vw&_nc_ohc=xSAg51Th1YgQ7kNvwF1UuEa&_nc_oc=AdqQd8pl5iHkcAPQ0J0lGkW--VqsQTE-P3CJMEuRlzvXt2HnTMbr64-BP2WlzjOhRGc&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQSAlMOBRQ157ftuhChcGh1DWlYYTUx8U0aI8rCSb5wHug&oe=6AFB7F95",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2026-02-15T18:34:11+0000",
-      "publishedAt": "2026-02-15T18:34:11+0000",
-      "gridOrder": 11,
-      "metrics": {
-        "reach": 180,
-        "likes": 7,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-18169222315179351",
-      "metaPublishId": "18169222315179351",
-      "title": "Poleras Personalizadas",
-      "caption": "Poleras Personalizadas\n\n#Estampados #Estampadospersonalizados #Regalos #emprendimiento #estampadoschile #poleraschile #Diseño #Moda #Dios #Jesus #amor #poleras cristianas",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/651545732_18093855638079728_7015001710211208047_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=107&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeEncoOr1rfLzPUU-9adurSNsDUVlKSd3oewNRWUpJ3eh6VIeMCO2HHJCwFiqZ_wtQA&_nc_ohc=AkbaSUbP8OAQ7kNvwESDh2d&_nc_oc=AdpmG6H3mLvctka2L-l1H8aNOcZCs3b-9S9KpXJeyrjyPboZTw8uPjO-dBLdyUrQTH4&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTtUHnbcM8rqMLUCbyw2VWlmSVgHen5WH5fPlxiwkGp_g&oe=6AFB97EB",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/651545732_18093855638079728_7015001710211208047_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=107&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeEncoOr1rfLzPUU-9adurSNsDUVlKSd3oewNRWUpJ3eh6VIeMCO2HHJCwFiqZ_wtQA&_nc_ohc=AkbaSUbP8OAQ7kNvwESDh2d&_nc_oc=AdpmG6H3mLvctka2L-l1H8aNOcZCs3b-9S9KpXJeyrjyPboZTw8uPjO-dBLdyUrQTH4&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTtUHnbcM8rqMLUCbyw2VWlmSVgHen5WH5fPlxiwkGp_g&oe=6AFB97EB",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-07-05T15:52:09+0000",
-      "publishedAt": "2021-07-05T15:52:09+0000",
-      "gridOrder": 12,
-      "metrics": {
-        "reach": 180,
-        "likes": 4,
-        "comments": 0,
-        "saves": 1
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-18018706117308231",
-      "metaPublishId": "18018706117308231",
-      "title": "Poleras personalizadas...",
-      "caption": "Poleras personalizadas...\n\n#poleraspersonalizadas\n#designs #emprendimientochile #poleras #estampadoschile #estampadospersonalizados #chile",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/625681305_18221457292308231_5377685496100739119_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=109&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiRkVFRC5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHhEhwf2XPK_Uc1MA0jrrdE3VMMNyY-XlDdUww3Jj5eUBt8BGP5tnBNuCwF4ZEBSk8&_nc_ohc=sy3ehLu3nnMQ7kNvwFJfDC0&_nc_oc=AdocLyTlyBvN5kbcFqKtDKexJ6tHbo9KB0gee_MKc_fB23l37GmcEMmqoIAjbyRImyc&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTHVcocQ2r-n97eN3Vn9W-K6VOivsPUDCgQGSlR-xHkHQ&oe=6AFB7ADF",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/625681305_18221457292308231_5377685496100739119_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=109&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiRkVFRC5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHhEhwf2XPK_Uc1MA0jrrdE3VMMNyY-XlDdUww3Jj5eUBt8BGP5tnBNuCwF4ZEBSk8&_nc_ohc=sy3ehLu3nnMQ7kNvwFJfDC0&_nc_oc=AdocLyTlyBvN5kbcFqKtDKexJ6tHbo9KB0gee_MKc_fB23l37GmcEMmqoIAjbyRImyc&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTHVcocQ2r-n97eN3Vn9W-K6VOivsPUDCgQGSlR-xHkHQ&oe=6AFB7ADF",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-27T16:33:05+0000",
-      "publishedAt": "2021-06-27T16:33:05+0000",
-      "gridOrder": 13,
-      "metrics": {
-        "reach": 180,
-        "likes": 4,
-        "comments": 0,
-        "saves": 1
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17891196632201511",
-      "metaPublishId": "17891196632201511",
-      "title": "Diseños para todos los gustos...",
-      "caption": "Diseños para todos los gustos...\n\n#tazas #tazaspersonalizadas #estampados #sublimacionchile #freddiemercury",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.71878-15/622886427_1374326580673675_6176524104715706231_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=110&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHitpzQ0SuNI53WvV6zkAiZ3C_s1jMYy7_cL-zWMxjLv0Yg0cpi8mlkanBKE40JqWs&_nc_ohc=p_ViJrS9KUcQ7kNvwFUCn9B&_nc_oc=AdoOV4V7sUKMn-WRxMSd3_MTZiy1YhpZbeGw_wr7hpE-nytlvmolsMOJQYSlh7AIq7k&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQQAAAA&oh=00_AQS6WhTt98lIRwCF2lN0Scrnc6HC3axiPiwArO7sdMQeRA&oe=6AFB9937",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.71878-15/622886427_1374326580673675_6176524104715706231_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=110&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHitpzQ0SuNI53WvV6zkAiZ3C_s1jMYy7_cL-zWMxjLv0Yg0cpi8mlkanBKE40JqWs&_nc_ohc=p_ViJrS9KUcQ7kNvwFUCn9B&_nc_oc=AdoOV4V7sUKMn-WRxMSd3_MTZiy1YhpZbeGw_wr7hpE-nytlvmolsMOJQYSlh7AIq7k&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQQAAAA&oh=00_AQS6WhTt98lIRwCF2lN0Scrnc6HC3axiPiwArO7sdMQeRA&oe=6AFB9937",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-27T16:32:09+0000",
-      "publishedAt": "2021-06-27T16:32:09+0000",
-      "gridOrder": 14,
-      "metrics": {
-        "reach": 180,
-        "likes": 5,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17859367325564381",
-      "metaPublishId": "17859367325564381",
-      "title": "Polera Estampada...",
-      "caption": "Polera Estampada...\n\n#poleraspersonalizadas\n#designs #emprendimientochile #poleras #estampadoschile #estampadospersonalizados #chile #beatles",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/650133978_18092386127035571_6358106652441420889_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=107&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHMgZ88Lhm69Wi3F-f-2az39AI6OVoxSoD0Ajo5WjFKgD1uX20S3lldLIHT1WP0adM&_nc_ohc=epQinT_qxXUQ7kNvwEFyFDf&_nc_oc=Adqe0wk8n-f3neP3asR2apkZhLW9aXda-4dlH4VdDsrMBaS7CoOTgFUuNq371cGhbYE&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTixhyaop7mFgFlrUoamT-5cbU8gWV1s5S4pmKFQGWc7Q&oe=6AFB9CDD",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/650133978_18092386127035571_6358106652441420889_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=107&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeHMgZ88Lhm69Wi3F-f-2az39AI6OVoxSoD0Ajo5WjFKgD1uX20S3lldLIHT1WP0adM&_nc_ohc=epQinT_qxXUQ7kNvwEFyFDf&_nc_oc=Adqe0wk8n-f3neP3asR2apkZhLW9aXda-4dlH4VdDsrMBaS7CoOTgFUuNq371cGhbYE&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQTixhyaop7mFgFlrUoamT-5cbU8gWV1s5S4pmKFQGWc7Q&oe=6AFB9CDD",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-27T16:28:50+0000",
-      "publishedAt": "2021-06-27T16:28:50+0000",
-      "gridOrder": 15,
-      "metrics": {
-        "reach": 180,
-        "likes": 5,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17942368753513282",
-      "metaPublishId": "17942368753513282",
-      "title": "Hermosa taza...",
-      "caption": "Hermosa taza...",
-      "mediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQNbFZn0XYms3TTAQ5AO-Q63FPQF2vrMDcU2arbaEqEvbg8YWGqhb4INAx19xU-rbJoKjn6h2kS4Ztx5TXHjLfcuHzjupOiyfRGL-1k.mp4?_nc_cat=104&_nc_oc=AdrgLuFpgzzluAWCYB_zXTJLsbGULIFdB5jp_2Mki7ERsvXTQht1QgxNbZ0SrQBY7k8&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=RRlu4WVIBokQ7kNvwFFccYI&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjoxNTM0NzUyMDkwNjA3MTk2LCJhc3NldF9hZ2VfZGF5cyI6MTk2MywidmlfdXNlY2FzZV9pZCI6MTAxNDYsImR1cmF0aW9uX3MiOjE0LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=d46778adf1495dfa&_nc_vs=HBkcFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC85NjQxOEY4OEU1NDFDMzdDNUI5MTE4OEJBN0ZEMERBNF92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAmuLnukqr2uQUVAigCQzMsF0AtMzMzMzMzGBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeFYf_6syUv1hQwodlG6LxPLXQExVYMddV1dATFVgx11XVoSYtk3zXAUv-EHe8iNi-4&oh=00_AQSTVdyn79HrQV6P2ElQ_iy8yIDDkaHTv-DHJyUpS9JKyw&oe=6AF781B4",
-      "publicMediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQNbFZn0XYms3TTAQ5AO-Q63FPQF2vrMDcU2arbaEqEvbg8YWGqhb4INAx19xU-rbJoKjn6h2kS4Ztx5TXHjLfcuHzjupOiyfRGL-1k.mp4?_nc_cat=104&_nc_oc=AdrgLuFpgzzluAWCYB_zXTJLsbGULIFdB5jp_2Mki7ERsvXTQht1QgxNbZ0SrQBY7k8&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=RRlu4WVIBokQ7kNvwFFccYI&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjoxNTM0NzUyMDkwNjA3MTk2LCJhc3NldF9hZ2VfZGF5cyI6MTk2MywidmlfdXNlY2FzZV9pZCI6MTAxNDYsImR1cmF0aW9uX3MiOjE0LCJ1cmxnZW5fc291cmNlIjoid3d3In0%3D&ccb=17-1&vs=d46778adf1495dfa&_nc_vs=HBkcFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC85NjQxOEY4OEU1NDFDMzdDNUI5MTE4OEJBN0ZEMERBNF92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAmuLnukqr2uQUVAigCQzMsF0AtMzMzMzMzGBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeFYf_6syUv1hQwodlG6LxPLXQExVYMddV1dATFVgx11XVoSYtk3zXAUv-EHe8iNi-4&oh=00_AQSTVdyn79HrQV6P2ElQ_iy8yIDDkaHTv-DHJyUpS9JKyw&oe=6AF781B4",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-27T16:22:56+0000",
-      "publishedAt": "2021-06-27T16:22:56+0000",
-      "gridOrder": 16,
-      "metrics": {
-        "reach": 180,
-        "likes": 5,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17911921789784845",
-      "metaPublishId": "17911921789784845",
-      "title": "Trabajo realizado por el día del padre...",
-      "caption": "Trabajo realizado por el día del padre...",
-      "mediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQPY23qavOj66WFXD-ftkroQ0dB4ShmikRgS_M9VknbrVqhmQk9a0waBcHWQIbfdzIUkDAylAaa8kp9Q8qsR8TPbDuFqXU-_X0TePUM.mp4?_nc_cat=108&_nc_oc=AdocW_-5guGhkdfxBjMq9Xe2wuaoSLSVAWw9LRhP7GvLayIjhqzmV2ORJIBPiupDfBM&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=NjUBj6dt5tgQ7kNvwHKcf2r&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjo3Njk2MTAzMjgyNjU1MTUsImFzc2V0X2FnZV9kYXlzIjoxOTYzLCJ2aV91c2VjYXNlX2lkIjoxMDE0NiwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=12c3e565286b51ad&_nc_vs=HBkcFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC9CODQ0MEM2RUM3RjFBMjRGNUE3N0Q4OUQ4NUI3NzJBRl92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAm1sza45v93QIVAigCQzMsF0AhEOVgQYk3GBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeFzuJkGNOfLfJVYc6gd7axDTfmJLtBr4FBN-Yku0GvgUBvPyDxy_iPrvw7BwPeZk3w&oh=00_AQQ1ELSn8OOKBsZLA3RSTOgGY6WCfo_obmLR-mcVO7Lnmg&oe=6AF78120",
-      "publicMediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQPY23qavOj66WFXD-ftkroQ0dB4ShmikRgS_M9VknbrVqhmQk9a0waBcHWQIbfdzIUkDAylAaa8kp9Q8qsR8TPbDuFqXU-_X0TePUM.mp4?_nc_cat=108&_nc_oc=AdocW_-5guGhkdfxBjMq9Xe2wuaoSLSVAWw9LRhP7GvLayIjhqzmV2ORJIBPiupDfBM&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=NjUBj6dt5tgQ7kNvwHKcf2r&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjo3Njk2MTAzMjgyNjU1MTUsImFzc2V0X2FnZV9kYXlzIjoxOTYzLCJ2aV91c2VjYXNlX2lkIjoxMDE0NiwiZHVyYXRpb25fcyI6OCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=12c3e565286b51ad&_nc_vs=HBkcFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC9CODQ0MEM2RUM3RjFBMjRGNUE3N0Q4OUQ4NUI3NzJBRl92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAm1sza45v93QIVAigCQzMsF0AhEOVgQYk3GBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeFzuJkGNOfLfJVYc6gd7axDTfmJLtBr4FBN-Yku0GvgUBvPyDxy_iPrvw7BwPeZk3w&oh=00_AQQ1ELSn8OOKBsZLA3RSTOgGY6WCfo_obmLR-mcVO7Lnmg&oe=6AF78120",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-27T16:21:44+0000",
-      "publishedAt": "2021-06-27T16:21:44+0000",
-      "gridOrder": 17,
-      "metrics": {
-        "reach": 180,
-        "likes": 6,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17861360921546437",
-      "metaPublishId": "17861360921546437",
-      "title": "Trabajos del día del padre...",
-      "caption": "Trabajos del día del padre...\nTazas con lindo motivo.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n#estampadospersonalizados \n#tazaspersonalizadas",
-      "mediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQMkakoSKeXavHzhLqWi8gHm1sC1b89uNrBinWOGrf7BWh5Pb7Wy23uYZlpgjWhfOfVrk-_t-ibtkUU_qreYjpdZilzy7AILmK4x4s4.mp4?_nc_cat=110&_nc_oc=Adri0UO2TeWQ3OEI2Vt2z3rvGmwXAggbkMoSQg1Hgm16UpzDdbYsi7l8lsfOtkSq7Sw&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=XHq-YEpxEYQQ7kNvwHPLslj&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjo0OTg2ODUyOTMwMTYwNjUsImFzc2V0X2FnZV9kYXlzIjoxOTY5LCJ2aV91c2VjYXNlX2lkIjoxMDE0NiwiZHVyYXRpb25fcyI6MTEsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=a1900b0a759b43f5&_nc_vs=HBksFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC9FNDRFM0I2RjI5QjY3MTY1MkRFRDQwNzNFNEMwNURCOV92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYOnBhc3N0aHJvdWdoX2V2ZXJzdG9yZS9HQVFlYUJ1by1ZOG1JWTBDQUVFY3Z3elQyY05VYnBrd0FBQUYVAgLIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAmgtD1-6bj4gEVAigCQzMsF0AmzMzMzMzNGBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeGxVqyJ2J3GoI7EeMvMD8GwHU3N4yl5d1MdTc3jKXl3U1XpTfE47pBVeiBVGpDac7k&oh=00_AQT-puJPDxhu5v6bpwZmlmP9ePIW9Abj8v56fPoRWky8jA&oe=6AF7AA22",
-      "publicMediaUrl": "https://instagram.fscl1-1.fna.fbcdn.net/o1/v/t16/f2/m84/AQMkakoSKeXavHzhLqWi8gHm1sC1b89uNrBinWOGrf7BWh5Pb7Wy23uYZlpgjWhfOfVrk-_t-ibtkUU_qreYjpdZilzy7AILmK4x4s4.mp4?_nc_cat=110&_nc_oc=Adri0UO2TeWQ3OEI2Vt2z3rvGmwXAggbkMoSQg1Hgm16UpzDdbYsi7l8lsfOtkSq7Sw&_nc_sid=5e9851&_nc_ht=instagram.fscl1-1.fna.fbcdn.net&_nc_ohc=XHq-YEpxEYQQ7kNvwHPLslj&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5JTlNUQUdSQU0uRkVFRC5DMy43MjAuZGFzaF9iYXNlbGluZV8xX3YxIiwieHB2X2Fzc2V0X2lkIjo0OTg2ODUyOTMwMTYwNjUsImFzc2V0X2FnZV9kYXlzIjoxOTY5LCJ2aV91c2VjYXNlX2lkIjoxMDE0NiwiZHVyYXRpb25fcyI6MTEsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&vs=a1900b0a759b43f5&_nc_vs=HBksFQIYTGlnX2JhY2tmaWxsX3RpbWVsaW5lX3ZvZC9FNDRFM0I2RjI5QjY3MTY1MkRFRDQwNzNFNEMwNURCOV92aWRlb19kYXNoaW5pdC5tcDQVAALIARIAFQIYOnBhc3N0aHJvdWdoX2V2ZXJzdG9yZS9HQVFlYUJ1by1ZOG1JWTBDQUVFY3Z3elQyY05VYnBrd0FBQUYVAgLIARIAKAAYABsCiAd1c2Vfb2lsATEScHJvZ3Jlc3NpdmVfcmVjaXBlATEVAAAmgtD1-6bj4gEVAigCQzMsF0AmzMzMzMzNGBJkYXNoX2Jhc2VsaW5lXzFfdjERAHXqB2XEngEA&_nc_gid=V_v3YX7waY41frTHQkRGbA&edm=AFF3FJ0EAAAA&_nc_map=urlgen_bucketless&_nc_zt=28&_nc_eui2=AeGxVqyJ2J3GoI7EeMvMD8GwHU3N4yl5d1MdTc3jKXl3U1XpTfE47pBVeiBVGpDac7k&oh=00_AQT-puJPDxhu5v6bpwZmlmP9ePIW9Abj8v56fPoRWky8jA&oe=6AF7AA22",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-06-21T14:26:21+0000",
-      "publishedAt": "2021-06-21T14:26:21+0000",
-      "gridOrder": 18,
-      "metrics": {
-        "reach": 180,
-        "likes": 2,
-        "comments": 0,
-        "saves": 1
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
-        }
-      ]
-    },
-    {
-      "id": "ig-17941559194444127",
-      "metaPublishId": "17941559194444127",
-      "title": "Tazones personalizados con el motivo que desees.",
-      "caption": "Tazones personalizados con el motivo que desees..\n#pais \n#venezuela \n#chile \n#santiago \n\nCotiza con nosotros. Somos tu mejor opción 😉",
-      "mediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/650393923_18080120975070690_614821956824181826_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=106&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeE_wJSuzVHcGgzBF1KizQxgFLkfxQXG3oUUuR_FBcbehbHWLFLUqL-sWmqeIBE_e_4&_nc_ohc=IIHkDJqqmbAQ7kNvwGS25pW&_nc_oc=AdoJXWrYnWXvD-PEQQ1rZyFA5INQk12C5jdQGnVBWdyf4-70AlJ2u11hqxyilULrnGU&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQSOkUQoPTchHJoC-1CpoHHchh8noDegs5Ob44cCIk3DdQ&oe=6AFB8974",
-      "publicMediaUrl": "https://scontent.cdninstagram.com/v/t51.82787-15/650393923_18080120975070690_614821956824181826_n.jpg?stp=dst-jpg_e35_tt6&_nc_cat=106&ccb=7-5&_nc_sid=18de74&efg=eyJlZmdfdGFnIjoiQ0FST1VTRUxfSVRFTS5iZXN0X2ltYWdlX3VybGdlbi5DMyJ9&_nc_eui2=AeE_wJSuzVHcGgzBF1KizQxgFLkfxQXG3oUUuR_FBcbehbHWLFLUqL-sWmqeIBE_e_4&_nc_ohc=IIHkDJqqmbAQ7kNvwGS25pW&_nc_oc=AdoJXWrYnWXvD-PEQQ1rZyFA5INQk12C5jdQGnVBWdyf4-70AlJ2u11hqxyilULrnGU&_nc_zt=23&_nc_ht=scontent.cdninstagram.com&edm=AFF3FJ0EAAAA&_nc_gid=V_v3YX7waY41frTHQkRGbA&_nc_ct=RQosPBUKFQIAAAA&oh=00_AQSOkUQoPTchHJoC-1CpoHHchh8noDegs5Ob44cCIk3DdQ&oe=6AFB8974",
-      "mediaType": "IMAGE",
-      "postFormat": "POST",
-      "platforms": [
-        "instagram"
-      ],
-      "status": "published",
-      "scheduledAt": "2021-02-27T20:39:31+0000",
-      "publishedAt": "2021-02-27T20:39:31+0000",
-      "gridOrder": 19,
-      "metrics": {
-        "reach": 180,
-        "likes": 7,
-        "comments": 0,
-        "saves": 2
-      },
-      "logs": [
-        {
-          "time": "2026-11-12T13:01:04.151Z",
-          "message": "Sincronizado en vivo desde @cocuyografic (Instagram Graph API)"
+          "time": "2026-11-11T18:00:00.000Z",
+          "message": "Publicado exitosamente."
         }
       ]
     }
   ],
-  "activityLogs": [
-    {
-      "id": "log-init",
-      "timestamp": "2026-11-10T16:13:26.637Z",
-      "type": "info",
-      "title": "Sistema de Automatización Activo",
-      "detail": "El motor de programación revisa tus posts cada 30 segundos."
-    }
-  ]
+  "activityLogs": []
 }

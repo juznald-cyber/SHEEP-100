@@ -393,9 +393,41 @@ function addActivityLog(db, type, title, detail) {
 // ==========================================
 // META INSTAGRAM GRAPH API 2-STEP PUBLISHER
 // ==========================================
+function extractGoogleDriveIdServer(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m1 = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  if (m1) return m1[1];
+  const m2 =
+    url.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?[^#]*?[?&]id=([a-zA-Z0-9_-]+)/i) ||
+    url.match(/drive\.google\.com\/(?:open|uc|thumbnail)\?id=([a-zA-Z0-9_-]+)/i);
+  if (m2) return m2[1];
+  const m3 = url.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i);
+  if (m3) return m3[1];
+  const m4 = url.match(/drive\.usercontent\.google\.com\/download\?[^#]*?id=([a-zA-Z0-9_-]+)/i);
+  if (m4) return m4[1];
+  return null;
+}
+
+function normalizeCloudMediaServer(rawUrl, type = 'image') {
+  const clean = (rawUrl || '').trim();
+  const driveId = extractGoogleDriveIdServer(clean);
+  if (driveId) {
+    const thumbUrl = `https://lh3.googleusercontent.com/d/${driveId}=w1080`;
+    const publicUrl =
+      type === 'video'
+        ? `https://drive.usercontent.google.com/download?id=${driveId}&export=download&confirm=t`
+        : thumbUrl;
+    return { isDrive: true, driveId, thumbUrl, publicUrl };
+  }
+  return { isDrive: false, driveId: null, thumbUrl: clean, publicUrl: clean };
+}
+
 async function publishToMetaInstagram(post, metaConfig) {
   const { accessToken, igUserId, simulationFallback } = metaConfig;
-  const mediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const isVid = /\.mp4(\?|$)/i.test(rawMediaUrl) || post.mediaType === 'REELS' || post.mediaType === 'VIDEO';
+  const norm = normalizeCloudMediaServer(rawMediaUrl, isVid ? 'video' : 'image');
+  const mediaUrl = norm.publicUrl || rawMediaUrl;
 
   // Check if user has real credentials configured
   const hasRealCredentials = Boolean(accessToken && igUserId);
@@ -622,12 +654,15 @@ app.post('/api/media/url', (req, res) => {
   const db = readDb();
   const isVideo = type === 'video' || /\.mp4(\?|$)/i.test(url);
   const isPng = /\.png(\?|$)/i.test(url);
+  const norm = normalizeCloudMediaServer(url, isVideo ? 'video' : 'image');
 
   const newMedia = {
     id: `media-${Date.now()}`,
     title: title || 'Recurso Multimedia Externo',
-    url: url.trim(),
-    publicUrl: url.trim(),
+    originalUrl: url.trim(),
+    driveId: norm.driveId || null,
+    url: norm.thumbUrl,
+    publicUrl: norm.publicUrl,
     type: isVideo ? 'video' : 'image',
     format: isVideo ? 'MP4' : isPng ? 'PNG' : 'JPG',
     tags: Array.isArray(tags)
