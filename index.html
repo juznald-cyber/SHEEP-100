@@ -802,15 +802,15 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
       <form id="formPostComposer" class="composer-form">
         <input type="hidden" id="postId" />
 
-        <!-- SELECTOR DESTACADO: POST NORMAL vs HISTORIA (STORY) vs REEL -->
-        <label style="margin-bottom:6px;">¿Qué tipo de contenido deseas programar?</label>
+        <!-- SELECTOR DESTACADO: SOLO POST vs SOLO HISTORIA (24H) vs SOLO REEL vs AMBOS -->
+        <label style="margin-bottom:6px;">¿Dónde deseas publicar este contenido?</label>
         <div class="format-selector-cards" id="formatSelectorCards">
           <label class="format-choice active" data-format-card="POST">
             <input type="radio" name="postFormatRadio" value="POST" checked />
             <span class="format-icon">📸</span>
             <div>
-              <strong>Post Normal (Feed)</strong>
-              <small>Cuadrícula permanente (1:1 o 4:5)</small>
+              <strong>Solo Post (Feed)</strong>
+              <small>Publicación fija en el muro</small>
             </div>
           </label>
 
@@ -818,8 +818,8 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
             <input type="radio" name="postFormatRadio" value="STORY" />
             <span class="format-icon">⭕</span>
             <div>
-              <strong>Historia / Story (24h)</strong>
-              <small>Vertical 9:16 • Se publica en tus Historias</small>
+              <strong>Solo Historia (24h)</strong>
+              <small>Exclusivo en Historias (No va a Reels)</small>
             </div>
           </label>
 
@@ -827,14 +827,23 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
             <input type="radio" name="postFormatRadio" value="REEL" />
             <span class="format-icon">🎬</span>
             <div>
-              <strong>Reel (Video)</strong>
-              <small>Video vertical MP4 en pestaña Reels</small>
+              <strong>Solo Reel (Video)</strong>
+              <small>Exclusivo en sección Reels</small>
+            </div>
+          </label>
+
+          <label class="format-choice story-choice" data-format-card="BOTH">
+            <input type="radio" name="postFormatRadio" value="BOTH" />
+            <span class="format-icon">🔥</span>
+            <div>
+              <strong>Ambos (Historia + Reel/Post)</strong>
+              <small>Se publica en Historia 24h Y en Reels/Feed</small>
             </div>
           </label>
         </div>
 
         <div id="storyHelperNotice" class="story-notice-banner hidden">
-          ⭕ <strong>Modo Historia (Story 24h) activo:</strong> Meta publicará esta imagen (JPG) o video (MP4) directamente en el anillo de Historias de tu cuenta de Instagram Business usando <code>media_type=STORIES</code>.
+          ⭕ <strong>Modo Historia (Story 24h) activo:</strong> Se publicará en el anillo de Historias 24h (<code>STORIES</code> en Instagram y <code>photo_stories</code> / <code>video_stories</code> en tu Página de Facebook).
         </div>
 
         <div class="composer-grid">
@@ -853,11 +862,12 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
             <label>URL Pública para Meta Graph API (https://...jpg o .mp4)</label>
             <input type="url" id="postPublicMediaUrl" placeholder="https://images.unsplash.com/..." required />
 
-            <label>Tipo de Archivo</label>
+            <label>Formato Técnico Meta API</label>
             <select id="postMediaType">
-              <option value="IMAGE">📸 Imagen JPG (Feed o Historia)</option>
-              <option value="STORIES">⭕ Historia 24h (Imagen JPG o Video MP4)</option>
-              <option value="REELS">🎬 Video MP4 (Reels)</option>
+              <option value="IMAGE">📸 Solo Post de Feed (Imagen JPG)</option>
+              <option value="STORIES">⭕ Solo Historia 24h (JPG o Video MP4)</option>
+              <option value="REELS">🎬 Solo Reel (Video MP4)</option>
+              <option value="BOTH">🔥 Ambos: Historia 24h + Reel/Post</option>
             </select>
           </div>
 
