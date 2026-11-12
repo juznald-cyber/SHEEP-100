@@ -87,17 +87,19 @@ service cloud.firestore {
     // Collection Rules
     // ===============================================================
 
-    // Single-workspace state & chunks synchronization
+    // Single-workspace state & relay synchronization (operates without Firebase Auth)
     match /sheep100/{docId} {
-      allow read: if isAuthenticated() || resource == null || ('payload' in resource.data) || ('savedAt' in resource.data);
+      // Must not depend on `resource` or `resource.data` so collection list/runQuery and doc get/onSnapshot succeed
+      allow read: if true;
       allow create: if isAuthenticated() || isValidWorkspaceDoc(request.resource.data);
       allow update: if isAuthenticated() || isValidWorkspaceDoc(request.resource.data);
       allow delete: if isAuthenticated();
     }
 
-    // Internal workspace users synchronization
+    // Internal workspace users synchronization (operates without Firebase Auth)
     match /sheep100_users/{userId} {
-      allow read: if isAuthenticated() || resource == null || ('username' in resource.data && 'passHash' in resource.data);
+      // Must not depend on `resource` or `resource.data` so collection.get()/onSnapshot()/runQuery succeed
+      allow read: if true;
       allow create: if isAuthenticated() || isValidSheepUser(request.resource.data);
       allow update: if isAuthenticated() || (
         isValidSheepUser(request.resource.data) &&

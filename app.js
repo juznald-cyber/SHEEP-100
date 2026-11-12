@@ -205,7 +205,10 @@ let cloud = {
   unsubWorkspace: null,
   unsubUsers: null,
   connected: false,
-  applyingRemote: false
+  hydrated: false,
+  restFallback: false,
+  applyingRemote: false,
+  lastKnownTokens: { meta: {}, tiktok: {} }
 };
 
 let currentWeekOffset = 0;
@@ -397,90 +400,192 @@ function loadLocalCache() {
   }
 }
 
+const FIRESTORE_PRINCIPAL_REST_URL =
+  'https://firestore.googleapis.com/v1/projects/sheep-100-b8a90/databases/(default)/documents/sheep100/principal';
+
+function pickNonEmpty(preferred, fallback = '') {
+  return preferred && String(preferred).trim() !== '' ? preferred : fallback || '';
+}
+
+function mergeProtectedState(baseState, incomingState) {
+  const base = baseState || {};
+  const inc = incomingState || {};
+  const prevMeta = base.metaConfig || {};
+  const incMeta = inc.metaConfig || {};
+  const prevTk = base.tiktokConfig || {};
+  const incTk = inc.tiktokConfig || {};
+
+  return {
+    ...base,
+    metaConfig: {
+      ...prevMeta,
+      ...incMeta,
+      accessToken: pickNonEmpty(incMeta.accessToken, prevMeta.accessToken),
+      appSecret: pickNonEmpty(incMeta.appSecret, prevMeta.appSecret),
+      fbPageAccessToken: pickNonEmpty(incMeta.fbPageAccessToken, prevMeta.fbPageAccessToken)
+    },
+    tiktokConfig: {
+      ...prevTk,
+      ...incTk,
+      clientKey: pickNonEmpty(incTk.clientKey, prevTk.clientKey),
+      clientSecret: pickNonEmpty(incTk.clientSecret, prevTk.clientSecret),
+      accessToken: pickNonEmpty(incTk.accessToken, prevTk.accessToken),
+      refreshToken: pickNonEmpty(incTk.refreshToken, prevTk.refreshToken),
+      openId: pickNonEmpty(incTk.openId, prevTk.openId),
+      codeVerifier: pickNonEmpty(incTk.codeVerifier, prevTk.codeVerifier)
+    },
+    mediaLibrary: Array.isArray(inc.mediaLibrary) ? inc.mediaLibrary : base.mediaLibrary,
+    posts: Array.isArray(inc.posts) ? inc.posts : base.posts,
+    hashtagGroups: Array.isArray(inc.hashtagGroups) ? inc.hashtagGroups : base.hashtagGroups
+  };
+}
+
+function rememberActiveTokens(state) {
+  const m = state?.metaConfig || {};
+  const t = state?.tiktokConfig || {};
+  cloud.lastKnownTokens = {
+    meta: {
+      accessToken: pickNonEmpty(m.accessToken, cloud.lastKnownTokens?.meta?.accessToken),
+      appSecret: pickNonEmpty(m.appSecret, cloud.lastKnownTokens?.meta?.appSecret),
+      fbPageAccessToken: pickNonEmpty(m.fbPageAccessToken, cloud.lastKnownTokens?.meta?.fbPageAccessToken)
+    },
+    tiktok: {
+      clientKey: pickNonEmpty(t.clientKey, cloud.lastKnownTokens?.tiktok?.clientKey),
+      clientSecret: pickNonEmpty(t.clientSecret, cloud.lastKnownTokens?.tiktok?.clientSecret),
+      accessToken: pickNonEmpty(t.accessToken, cloud.lastKnownTokens?.tiktok?.accessToken),
+      refreshToken: pickNonEmpty(t.refreshToken, cloud.lastKnownTokens?.tiktok?.refreshToken),
+      openId: pickNonEmpty(t.openId, cloud.lastKnownTokens?.tiktok?.openId)
+    }
+  };
+}
+
+async function fetchPrincipalViaRest() {
+  const res = await fetch(FIRESTORE_PRINCIPAL_REST_URL, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`Firestore REST HTTP ${res.status}`);
+  const doc = await res.json();
+  const payload = doc?.fields?.payload?.stringValue;
+  if (!payload) return null;
+  return { payload };
+}
+
 async function initFirebaseCloud() {
+  rememberActiveTokens(appState);
+
   try {
     const res = await fetch('/api/state');
     if (res.ok) {
       const serverData = await res.json();
       if (serverData && Array.isArray(serverData.posts)) {
-        appState = { ...appState, ...serverData };
+        appState = mergeProtectedState(appState, serverData);
         ensureSampleStoryExists();
+        rememberActiveTokens(appState);
       }
     }
   } catch (_) {}
 
-  if (typeof firebase === 'undefined' || !window.firebaseConfig) {
-    setCloudPillStatus(false, 'Modo Local');
-    renderAll();
-    return;
-  }
+  cloud.hydrated = false;
+  cloud.connected = false;
+  cloud.restFallback = false;
 
-  try {
-    cloud.app = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.firebaseConfig);
-    cloud.db = firebase.firestore();
-    cloud.docRef = cloud.db.collection('sheep100').doc('principal');
-    cloud.usersColRef = cloud.db.collection('sheep100_users');
+  if (typeof firebase !== 'undefined' && window.firebaseConfig) {
+    try {
+      cloud.app = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(window.firebaseConfig);
+      cloud.db = firebase.firestore();
+      cloud.docRef = cloud.db.collection('sheep100').doc('principal');
+      cloud.usersColRef = cloud.db.collection('sheep100_users');
 
-    const usersSnap = await cloud.usersColRef.get();
-    if (usersSnap.empty) {
-      for (const u of DEFAULT_USERS) {
-        const docId = sanitizeDocId(u.username);
-        await cloud.usersColRef.doc(docId).set({
-          username: u.username.toLowerCase(),
-          name: u.name,
-          passHash: u.passHash,
-          role: u.role || 'admin',
-          updatedAt: new Date().toISOString()
-        });
+      // Cargar workspace principal primero para que nunca lo bloquee sheep100_users
+      const snap = await cloud.docRef.get();
+      cloud.hydrated = true;
+      if (snap.exists && snap.data()?.payload) {
+        applyCloudPayload(snap.data());
+      } else {
+        await saveStateEverywhere(false);
       }
-    } else {
-      const loadedUsers = [];
-      usersSnap.forEach((doc) => loadedUsers.push(doc.data()));
-      if (loadedUsers.length) {
-        authorizedUsers = loadedUsers;
-        localStorage.setItem(LS_USERS_KEY, JSON.stringify(authorizedUsers));
-      }
-    }
 
-    cloud.unsubUsers = cloud.usersColRef.onSnapshot((snap) => {
-      const list = [];
-      snap.forEach((d) => list.push(d.data()));
-      if (list.length) {
-        authorizedUsers = list;
-        localStorage.setItem(LS_USERS_KEY, JSON.stringify(authorizedUsers));
-        renderUsersList();
-      }
-    });
+      cloud.connected = true;
+      setCloudPillStatus(true, '☁️ Firebase en Tiempo Real');
 
-    const snap = await cloud.docRef.get();
-    if (snap.exists && snap.data()?.payload) {
-      applyCloudPayload(snap.data());
-    } else {
-      await saveStateEverywhere(false);
-    }
-
-    cloud.connected = true;
-    setCloudPillStatus(true, '☁️ Firebase en Tiempo Real');
-
-    cloud.unsubWorkspace = cloud.docRef.onSnapshot(
-      (docSnap) => {
-        if (!docSnap.exists) return;
-        const data = docSnap.data();
-        if (!data || data.updatedBy === myClientId) return;
-        if (applyCloudPayload(data)) {
-          showToast('☁️ Sincronizado en tiempo real desde la nube');
+      cloud.unsubWorkspace = cloud.docRef.onSnapshot(
+        (docSnap) => {
+          if (!docSnap.exists) return;
+          const data = docSnap.data();
+          if (!data || data.updatedBy === myClientId) return;
+          if (applyCloudPayload(data)) {
+            showToast('☁️ Sincronizado en tiempo real desde la nube');
+          }
+        },
+        (err) => {
+          console.warn('Firestore listener warning:', err);
+          setCloudPillStatus(false, 'Modo Local + Caché');
         }
-      },
-      (err) => {
-        console.warn('Firestore listener warning:', err);
-        setCloudPillStatus(false, 'Modo Local + Caché');
+      );
+
+      // Sincronizar usuarios de forma aislada (si falla por reglas o red, no tumba el estado principal)
+      try {
+        const usersSnap = await cloud.usersColRef.get();
+        if (usersSnap.empty) {
+          for (const u of DEFAULT_USERS) {
+            const docId = sanitizeDocId(u.username);
+            await cloud.usersColRef.doc(docId).set({
+              username: u.username.toLowerCase(),
+              name: u.name,
+              passHash: u.passHash,
+              role: u.role || 'admin',
+              updatedAt: new Date().toISOString()
+            });
+          }
+        } else {
+          const loadedUsers = [];
+          usersSnap.forEach((doc) => loadedUsers.push(doc.data()));
+          if (loadedUsers.length) {
+            authorizedUsers = loadedUsers;
+            localStorage.setItem(LS_USERS_KEY, JSON.stringify(authorizedUsers));
+          }
+        }
+
+        cloud.unsubUsers = cloud.usersColRef.onSnapshot(
+          (uSnap) => {
+            const list = [];
+            uSnap.forEach((d) => list.push(d.data()));
+            if (list.length) {
+              authorizedUsers = list;
+              localStorage.setItem(LS_USERS_KEY, JSON.stringify(authorizedUsers));
+              renderUsersList();
+            }
+          },
+          (uErr) => console.warn('Users snapshot warning:', uErr)
+        );
+      } catch (usersErr) {
+        console.warn('Aviso cargando sheep100_users (usando caché local):', usersErr);
       }
-    );
-  } catch (err) {
-    console.warn('No se pudo conectar con Firestore:', err);
-    setCloudPillStatus(false, 'Modo Local');
+
+      renderAll();
+      return;
+    } catch (err) {
+      console.warn('Firestore SDK falló, intentando REST fallback:', err);
+      cloud.docRef = null;
+      cloud.connected = false;
+    }
   }
 
+  // Fallback directo via Firestore REST API (funciona incluso si extensiones/WebChannel bloquean SDK)
+  try {
+    const restDoc = await fetchPrincipalViaRest();
+    if (restDoc && restDoc.payload) {
+      cloud.hydrated = true;
+      cloud.connected = true;
+      cloud.restFallback = true;
+      applyCloudPayload(restDoc);
+      setCloudPillStatus(true, '☁️ Firebase Conectado');
+      renderAll();
+      return;
+    }
+  } catch (restErr) {
+    console.warn('No se pudo conectar con Firestore REST:', restErr);
+  }
+
+  setCloudPillStatus(false, 'Modo Local');
   renderAll();
 }
 
@@ -493,35 +598,9 @@ function applyCloudPayload(data) {
       cloud.applyingRemote = false;
       return false;
     }
-    const pickNonEmpty = (a, b) => (a && String(a).trim() !== '' ? a : b);
-    const prevMeta = appState.metaConfig || {};
-    const incMeta = parsed.metaConfig || {};
-    const prevTk = appState.tiktokConfig || {};
-    const incTk = parsed.tiktokConfig || {};
-
-    appState = {
-      ...appState,
-      metaConfig: {
-        ...prevMeta,
-        ...incMeta,
-        accessToken: pickNonEmpty(incMeta.accessToken, prevMeta.accessToken || ''),
-        appSecret: pickNonEmpty(incMeta.appSecret, prevMeta.appSecret || ''),
-        fbPageAccessToken: pickNonEmpty(incMeta.fbPageAccessToken, prevMeta.fbPageAccessToken || '')
-      },
-      tiktokConfig: {
-        ...prevTk,
-        ...incTk,
-        clientKey: pickNonEmpty(incTk.clientKey, prevTk.clientKey || ''),
-        clientSecret: pickNonEmpty(incTk.clientSecret, prevTk.clientSecret || ''),
-        accessToken: pickNonEmpty(incTk.accessToken, prevTk.accessToken || ''),
-        refreshToken: pickNonEmpty(incTk.refreshToken, prevTk.refreshToken || ''),
-        openId: pickNonEmpty(incTk.openId, prevTk.openId || '')
-      },
-      mediaLibrary: Array.isArray(parsed.mediaLibrary) ? parsed.mediaLibrary : appState.mediaLibrary,
-      posts: Array.isArray(parsed.posts) ? parsed.posts : appState.posts,
-      hashtagGroups: Array.isArray(parsed.hashtagGroups) ? parsed.hashtagGroups : appState.hashtagGroups
-    };
+    appState = mergeProtectedState(appState, parsed);
     ensureSampleStoryExists();
+    rememberActiveTokens(appState);
     localStorage.setItem(LS_STATE_KEY, JSON.stringify(appState));
     syncToLocalServer(appState);
     renderAll();
@@ -534,25 +613,64 @@ function applyCloudPayload(data) {
 }
 
 async function saveStateEverywhere(showNotification = false) {
+  // Nunca sobrescribir tokens activos conocidos con cadenas vacías accidentales
+  appState = mergeProtectedState(
+    { metaConfig: cloud.lastKnownTokens?.meta || {}, tiktokConfig: cloud.lastKnownTokens?.tiktok || {} },
+    appState
+  );
+  rememberActiveTokens(appState);
+
   try {
     localStorage.setItem(LS_STATE_KEY, JSON.stringify(appState));
   } catch (_) {}
 
   syncToLocalServer(appState);
 
-  if (cloud.docRef && !cloud.applyingRemote) {
+  if (!cloud.hydrated || cloud.applyingRemote) {
+    return;
+  }
+
+  const savedAt = new Date().toISOString();
+  const payloadStr = JSON.stringify(appState);
+
+  if (cloud.docRef) {
     try {
       await cloud.docRef.set({
-        payload: JSON.stringify(appState),
-        savedAt: new Date().toISOString(),
+        payload: payloadStr,
+        savedAt,
         updatedBy: myClientId
       });
       setCloudPillStatus(true, '☁️ Guardado en Firebase');
       if (showNotification) {
         showToast('☁️ Guardado en tiempo real (Local + Firebase Cloud)');
       }
+      return;
     } catch (err) {
-      console.warn('Error guardando en Firestore:', err);
+      console.warn('Error guardando en Firestore SDK, intentando REST:', err);
+    }
+  }
+
+  if (cloud.restFallback || cloud.connected) {
+    try {
+      const restRes = await fetch(FIRESTORE_PRINCIPAL_REST_URL, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fields: {
+            payload: { stringValue: payloadStr },
+            savedAt: { stringValue: savedAt },
+            updatedBy: { stringValue: myClientId }
+          }
+        })
+      });
+      if (restRes.ok) {
+        setCloudPillStatus(true, '☁️ Guardado en Firebase');
+        if (showNotification) {
+          showToast('☁️ Guardado en Firebase Cloud');
+        }
+      }
+    } catch (restErr) {
+      console.warn('Error guardando en Firestore REST:', restErr);
     }
   }
 }
@@ -3101,16 +3219,17 @@ function initTikTokWizardEvents() {
 
   formTikTok?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const prevTk = appState.tiktokConfig || {};
     appState.tiktokConfig = {
-      ...(appState.tiktokConfig || {}),
-      clientKey: (document.getElementById('cfgTikTokClientKey')?.value || 'sbawbyxlo8yktgrxxv').trim(),
-      clientSecret: (document.getElementById('cfgTikTokClientSecret')?.value || '').trim(),
-      username: (document.getElementById('cfgTikTokUsername')?.value || 'cocuyo.grafic').trim(),
-      deliveryMode: document.getElementById('cfgTikTokDeliveryMode')?.value || 'DIRECT',
-      redirectUri: (document.getElementById('cfgTikTokRedirectUri')?.value || 'https://juznald-cyber.github.io/SHEEP-100/').trim(),
-      accessToken: (document.getElementById('cfgTikTokAccessToken')?.value || '').trim(),
-      refreshToken: (document.getElementById('cfgTikTokRefreshToken')?.value || '').trim(),
-      openId: (document.getElementById('cfgTikTokOpenId')?.value || '').trim()
+      ...prevTk,
+      clientKey: pickNonEmpty(document.getElementById('cfgTikTokClientKey')?.value?.trim(), prevTk.clientKey || 'sbawbyxlo8yktgrxxv'),
+      clientSecret: pickNonEmpty(document.getElementById('cfgTikTokClientSecret')?.value?.trim(), prevTk.clientSecret),
+      username: pickNonEmpty(document.getElementById('cfgTikTokUsername')?.value?.trim(), prevTk.username || 'cocuyo.grafic'),
+      deliveryMode: document.getElementById('cfgTikTokDeliveryMode')?.value || prevTk.deliveryMode || 'DIRECT',
+      redirectUri: pickNonEmpty(document.getElementById('cfgTikTokRedirectUri')?.value?.trim(), prevTk.redirectUri || 'https://juznald-cyber.github.io/SHEEP-100/'),
+      accessToken: pickNonEmpty(document.getElementById('cfgTikTokAccessToken')?.value?.trim(), prevTk.accessToken),
+      refreshToken: pickNonEmpty(document.getElementById('cfgTikTokRefreshToken')?.value?.trim(), prevTk.refreshToken),
+      openId: pickNonEmpty(document.getElementById('cfgTikTokOpenId')?.value?.trim(), prevTk.openId)
     };
 
     const feedback = document.getElementById('tiktokVerifyFeedback');
@@ -3241,12 +3360,16 @@ function renderTikTokWizardState() {
   }
 
   const fb = document.getElementById('tiktokVerifyFeedback');
-  if (fb && tk.accessToken && !fb.classList.contains('err')) {
-    fb.classList.remove('hidden', 'err');
-    fb.classList.add('ok');
-    fb.innerHTML = `✅ <strong>¡TikTok Conectado y Sincronizado en la Nube!</strong> Cuenta: <b>@${escapeHtml(
-      (tk.username || 'cocuyo.grafic').replace(/^@/, '')
-    )}</b> • Refresh Token (365 días) activo para publicar videos desde <b>Google Drive</b> incluso con tu PC apagado.`;
+  if (fb) {
+    if (tk.accessToken && String(tk.accessToken).trim() !== '') {
+      fb.classList.remove('hidden', 'err');
+      fb.classList.add('ok');
+      fb.innerHTML = `✅ <strong>¡TikTok Conectado y Sincronizado en la Nube!</strong> Cuenta: <b>@${escapeHtml(
+        (tk.username || 'cocuyo.grafic').replace(/^@/, '')
+      )}</b> • Refresh Token (365 días) activo para publicar videos desde <b>Google Drive</b> incluso con tu PC apagado.`;
+    } else if (!fb.classList.contains('err') && !fb.classList.contains('ok')) {
+      fb.classList.add('hidden');
+    }
   }
 }
 

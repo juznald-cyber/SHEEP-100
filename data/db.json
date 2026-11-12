@@ -30,8 +30,7 @@
     "deliveryMode": "DIRECT",
     "redirectUri": "https://juznald-cyber.github.io/SHEEP-100/",
     "codeVerifier": "2od57TrCDyFRy5gdVW7_ZCCrt~QCLYzCzKC4fqCSAZbksW9mD_GWVbKULPsB4r8F",
-    "expiresAt": 1794595572123,
-    "connected": true
+    "expiresAt": 1794595572123
   },
   "hashtagGroups": [
     {
@@ -135,37 +134,6 @@
     }
   ],
   "posts": [
-    {
-      "id": "post-story-1",
-      "title": "Historia: Encuesta & Oferta Flash 24h",
-      "caption": "🔥 ¡Solo por las próximas 24 horas! Responde \"QUIERO\" a esta historia para recibir acceso anticipado.",
-      "mediaId": "media-4",
-      "mediaUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
-      "publicMediaUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1080&q=85",
-      "mediaType": "STORIES",
-      "postFormat": "STORY",
-      "platforms": [
-        "instagram",
-        "facebook"
-      ],
-      "status": "scheduled",
-      "scheduledAt": "2026-11-12T20:49:58.822Z",
-      "firstComment": "Sticker de enlace: https://sheep-100-b8a90.web.app",
-      "gridOrder": 0,
-      "metrics": {
-        "reach": 1840,
-        "likes": 142,
-        "comments": 38,
-        "saves": 64
-      },
-      "createdAt": "2026-11-12T16:49:58.822Z",
-      "logs": [
-        {
-          "time": "2026-11-12T16:49:58.822Z",
-          "message": "Historia (24h) programada para publicación automática."
-        }
-      ]
-    },
     {
       "id": "ig-18169222315179351",
       "metaPublishId": "18169222315179351",
