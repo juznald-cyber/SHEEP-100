@@ -19,23 +19,23 @@ function getDefaultInitialState() {
 
   return {
     metaConfig: {
-      appId: '',
+      appId: '1728381135376111',
       appSecret: '',
-      accessToken: '',
-      igUserId: '',
-      igUsername: '',
-      fbPageId: '',
-      fbPageName: '',
-      followersCount: 4820,
+      accessToken: 'EAAYj9BecTu8BSymPWwLLxxqZCAsWfcEmMeZCvgj9Swj5eEWRywnqCYe0rlrTusY9Wmc38c8Iu0Vsjwl3mbVPZCcbFAAd1Xn5jhaEYUVOtAi62M3lXw2ZAHjQ7Esfw4k54jB93ZA2bUZC9jWR8oNi21sz4JgFykUPz8zKEKwPDKii7bljWggBXe29MwHVVrGqyQpRphG2ZAjSj02ayoNVESYXN2LBxMV80Bnh3hEWn0fwGFVX0qXTeCrUyu7TIMZBztHQD0nEoCfvTZB61gX60eXTmx84ZD',
+      igUserId: '17841444552571242',
+      igUsername: 'cocuyografic',
+      fbPageId: '102786358439057',
+      fbPageName: 'Cocuyo Grafic',
+      followersCount: 199,
       autoPublishEnabled: true,
       simulationFallback: true,
       geminiApiKey: '',
       wizardSteps: {
-        step1_devAccount: false,
-        step2_igGraphApi: false,
-        step3_testerRole: false,
-        step4_linkFbPage: false,
-        step5_accessToken: false
+        step1_devAccount: true,
+        step2_igGraphApi: true,
+        step3_testerRole: true,
+        step4_linkFbPage: true,
+        step5_accessToken: true
       }
     },
     hashtagGroups: [
@@ -232,6 +232,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function ensureSampleStoryExists() {
+  const defCfg = getDefaultInitialState().metaConfig;
+  appState.metaConfig = appState.metaConfig || {};
+  if (!appState.metaConfig.igUserId) {
+    appState.metaConfig.igUserId = defCfg.igUserId;
+    appState.metaConfig.igUsername = defCfg.igUsername;
+    appState.metaConfig.fbPageId = defCfg.fbPageId;
+    appState.metaConfig.fbPageName = defCfg.fbPageName;
+    appState.metaConfig.followersCount = defCfg.followersCount;
+    appState.metaConfig.wizardSteps = { ...defCfg.wizardSteps };
+  }
+  if (!appState.metaConfig.appId) {
+    appState.metaConfig.appId = defCfg.appId;
+  }
+  if (!appState.metaConfig.accessToken) {
+    appState.metaConfig.accessToken = defCfg.accessToken;
+  }
+
   if (!Array.isArray(appState.posts)) return;
   appState.posts.forEach((p, idx) => {
     if (!p.postFormat) {
@@ -1835,7 +1852,7 @@ function initMetaWizardEvents() {
     const token = document.getElementById('cfgAccessToken').value.trim();
     const feedback = document.getElementById('tokenVerifyFeedback');
     feedback.classList.remove('hidden', 'ok', 'err');
-    feedback.textContent = '⏳ Consultando https://graph.facebook.com/v21.0/me/accounts ...';
+    feedback.textContent = '⏳ Analizando Token en Meta Graph API (me/accounts + debug_token)...';
 
     if (!token) {
       feedback.classList.add('err');
@@ -1844,7 +1861,13 @@ function initMetaWizardEvents() {
     }
 
     try {
-      const graphUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,instagram_business_account{id,username,name,followers_count}&access_token=${encodeURIComponent(
+      let pageId = '';
+      let pageName = '';
+      let igAccount = null;
+      let detectedAppId = '';
+
+      // Método 1: Consultar /me/accounts (Páginas clásicas)
+      const graphUrl = `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,instagram_business_account{id,username,name,followers_count,media_count,profile_picture_url}&access_token=${encodeURIComponent(
         token
       )}`;
       const res = await fetch(graphUrl);
@@ -1860,35 +1883,133 @@ function initMetaWizardEvents() {
 
       const pages = data.data || [];
       const pageWithIg = pages.find((p) => p.instagram_business_account);
+      if (pageWithIg) {
+        pageId = pageWithIg.id;
+        pageName = pageWithIg.name;
+        igAccount = pageWithIg.instagram_business_account;
+      }
 
-      if (!pageWithIg) {
+      // Método 2 (Clave para Meta Business Suite): Inspeccionar debug_token -> granular_scopes
+      // Cuando la Página pertenece a un Portafolio Comercial, /me/accounts devuelve [], pero debug_token entrega los target_ids exactos
+      if (!igAccount) {
+        feedback.textContent = '🔍 Buscando permisos granulares en Meta Business Portfolio (debug_token)...';
+        const dbgUrl = `https://graph.facebook.com/v22.0/debug_token?input_token=${encodeURIComponent(
+          token
+        )}&access_token=${encodeURIComponent(token)}`;
+        const dbgRes = await fetch(dbgUrl);
+        const dbgData = await dbgRes.json();
+        const tokenInfo = dbgData?.data;
+
+        if (tokenInfo) {
+          if (tokenInfo.app_id) detectedAppId = String(tokenInfo.app_id);
+          const gScopes = Array.isArray(tokenInfo.granular_scopes) ? tokenInfo.granular_scopes : [];
+          const pageIds = [];
+          const igIds = [];
+
+          for (const gs of gScopes) {
+            if (
+              (gs.scope === 'pages_show_list' || gs.scope === 'pages_read_engagement') &&
+              Array.isArray(gs.target_ids)
+            ) {
+              gs.target_ids.forEach((id) => {
+                if (!pageIds.includes(id)) pageIds.push(id);
+              });
+            }
+            if (gs.scope && gs.scope.startsWith('instagram_') && Array.isArray(gs.target_ids)) {
+              gs.target_ids.forEach((id) => {
+                if (!igIds.includes(id)) igIds.push(id);
+              });
+            }
+          }
+
+          // Consultar directamente cada Page ID autorizado en el token
+          for (const pid of pageIds) {
+            const pRes = await fetch(
+              `https://graph.facebook.com/v22.0/${pid}?fields=id,name,instagram_business_account{id,username,name,followers_count,media_count,profile_picture_url}&access_token=${encodeURIComponent(
+                token
+              )}`
+            );
+            const pData = await pRes.json();
+            if (pRes.ok && !pData.error) {
+              pageId = pData.id || pid;
+              pageName = pData.name || pageName;
+              if (pData.instagram_business_account) {
+                igAccount = pData.instagram_business_account;
+                break;
+              }
+            }
+          }
+
+          // Consultar directamente cada Instagram Business ID autorizado en el token
+          if (!igAccount && igIds.length > 0) {
+            for (const iid of igIds) {
+              const iRes = await fetch(
+                `https://graph.facebook.com/v22.0/${iid}?fields=id,username,name,followers_count,follows_count,media_count,profile_picture_url,biography&access_token=${encodeURIComponent(
+                  token
+                )}`
+              );
+              const iData = await iRes.json();
+              if (iRes.ok && !iData.error && iData.id) {
+                igAccount = iData;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Método 3: Consultar /me directo (si es un Token de Página)
+      if (!igAccount) {
+        try {
+          const directRes = await fetch(
+            `https://graph.facebook.com/v22.0/me?fields=id,name,instagram_business_account{id,username,name,followers_count}&access_token=${encodeURIComponent(
+              token
+            )}`
+          );
+          const directData = await directRes.json();
+          if (directRes.ok && directData.instagram_business_account) {
+            pageId = directData.id;
+            pageName = directData.name || 'Página de Facebook';
+            igAccount = directData.instagram_business_account;
+          }
+        } catch (_) {}
+      }
+
+      if (!igAccount) {
         feedback.classList.add('err');
         feedback.textContent =
-          pages.length === 0
-            ? '⚠️ El Token es válido pero no devolvió Páginas de Facebook. Asegúrate de marcar tu Página y añadir el permiso pages_show_list.'
-            : '⚠️ Se encontró tu Página de Facebook, pero aún no tiene una cuenta de Instagram Empresa vinculada (revisa el Paso 4).';
+          '⚠️ El Token es válido pero no tiene ninguna Página o cuenta de Instagram autorizada. Al hacer clic en "Generate Access Token", asegúrate de marcar tu Página y tu cuenta de Instagram.';
         return;
       }
 
-      const ig = pageWithIg.instagram_business_account;
       appState.metaConfig.accessToken = token;
-      appState.metaConfig.fbPageId = pageWithIg.id;
-      appState.metaConfig.fbPageName = pageWithIg.name;
-      appState.metaConfig.igUserId = ig.id;
-      appState.metaConfig.igUsername = ig.username || ig.name || '';
-      if (ig.followers_count) appState.metaConfig.followersCount = ig.followers_count;
-      appState.metaConfig.wizardSteps = appState.metaConfig.wizardSteps || {};
-      appState.metaConfig.wizardSteps.step5_accessToken = true;
+      if (detectedAppId) appState.metaConfig.appId = detectedAppId;
+      appState.metaConfig.fbPageId = pageId;
+      appState.metaConfig.fbPageName = pageName || 'Página Conectada';
+      appState.metaConfig.igUserId = igAccount.id;
+      appState.metaConfig.igUsername = igAccount.username || igAccount.name || '';
+      if (igAccount.followers_count) appState.metaConfig.followersCount = igAccount.followers_count;
+      appState.metaConfig.wizardSteps = {
+        step1_devAccount: true,
+        step2_igGraphApi: true,
+        step3_testerRole: true,
+        step4_linkFbPage: true,
+        step5_accessToken: true
+      };
 
       feedback.classList.add('ok');
       feedback.innerHTML = `✅ <strong>¡Conexión Exitosa!</strong> Página: <b>${escapeHtml(
-        pageWithIg.name
-      )}</b> • Instagram Business: <b>@${escapeHtml(
-        ig.username || ig.name
-      )}</b> (ID: <code>${ig.id}</code>). Listo para publicar Posts, Historias y leer Métricas.`;
+        pageName || 'Cocuyo Grafic'
+      )}</b> (ID: <code>${escapeHtml(pageId)}</code>) • Instagram Business: <b>@${escapeHtml(
+        igAccount.username || igAccount.name
+      )}</b> (ID: <code>${igAccount.id}</code> • <b>${
+        igAccount.followers_count ?? 199
+      } seguidores</b>). ¡Listo para publicar Posts, Historias 24h y sincronizar Métricas!`;
 
       renderAll();
       await saveStateEverywhere(true);
+      // Sincronizar automáticamente las publicaciones y métricas reales de la cuenta conectada
+      syncLiveMetaMetrics();
     } catch (err) {
       feedback.classList.add('err');
       feedback.textContent = `❌ Error al conectar con Meta: ${err.message}`;

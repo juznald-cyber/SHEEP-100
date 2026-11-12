@@ -202,22 +202,23 @@ function getInitialData() {
 
   return {
     metaConfig: {
-      appId: '',
+      appId: '1728381135376111',
       appSecret: '',
-      accessToken: '',
-      igUserId: '',
-      igUsername: '',
-      fbPageId: '',
-      fbPageName: '',
+      accessToken: 'EAAYj9BecTu8BSymPWwLLxxqZCAsWfcEmMeZCvgj9Swj5eEWRywnqCYe0rlrTusY9Wmc38c8Iu0Vsjwl3mbVPZCcbFAAd1Xn5jhaEYUVOtAi62M3lXw2ZAHjQ7Esfw4k54jB93ZA2bUZC9jWR8oNi21sz4JgFykUPz8zKEKwPDKii7bljWggBXe29MwHVVrGqyQpRphG2ZAjSj02ayoNVESYXN2LBxMV80Bnh3hEWn0fwGFVX0qXTeCrUyu7TIMZBztHQD0nEoCfvTZB61gX60eXTmx84ZD',
+      igUserId: '17841444552571242',
+      igUsername: 'cocuyografic',
+      fbPageId: '102786358439057',
+      fbPageName: 'Cocuyo Grafic',
+      followersCount: 199,
       autoPublishEnabled: true,
       simulationFallback: true,
       geminiApiKey: '',
       wizardSteps: {
-        step1_devAccount: false,
-        step2_igGraphApi: false,
-        step3_testerRole: false,
-        step4_linkFbPage: false,
-        step5_accessToken: false
+        step1_devAccount: true,
+        step2_igGraphApi: true,
+        step3_testerRole: true,
+        step4_linkFbPage: true,
+        step5_accessToken: true
       }
     },
     hashtagGroups: [
@@ -844,9 +845,10 @@ app.post('/api/meta/verify-token', async (req, res) => {
     let igAccount = null;
     let pageName = '';
     let pageId = '';
+    let detectedAppId = '';
 
     // 1. Intentar por me/accounts (Páginas clásicas)
-    const graphUrl = `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(token)}`;
+    const graphUrl = `https://graph.facebook.com/v22.0/me/accounts?fields=id,name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(token)}`;
     const response = await fetch(graphUrl);
     const data = await response.json();
 
@@ -859,10 +861,64 @@ app.post('/api/meta/verify-token', async (req, res) => {
       }
     }
 
-    // 2. Fallback: Si el token es de Página o NPE, consultar /me directo
+    // 2. Fallback Principal: Inspeccionar debug_token y granular_scopes (Resuelve cuando la Página está en Meta Business Suite y /me/accounts viene vacío)
     if (!igAccount) {
       try {
-        const directUrl = `https://graph.facebook.com/v21.0/me?fields=id,name,instagram_business_account{id,username,name}&access_token=${encodeURIComponent(token)}`;
+        const dbgUrl = `https://graph.facebook.com/v22.0/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`;
+        const dbgRes = await fetch(dbgUrl);
+        const dbgData = await dbgRes.json();
+        const tokenInfo = dbgData?.data;
+        if (tokenInfo) {
+          if (tokenInfo.app_id) detectedAppId = String(tokenInfo.app_id);
+          const gScopes = Array.isArray(tokenInfo.granular_scopes) ? tokenInfo.granular_scopes : [];
+          const pageIds = [];
+          const igIds = [];
+          for (const gs of gScopes) {
+            if ((gs.scope === 'pages_show_list' || gs.scope === 'pages_read_engagement') && Array.isArray(gs.target_ids)) {
+              gs.target_ids.forEach((id) => { if (!pageIds.includes(id)) pageIds.push(id); });
+            }
+            if (gs.scope && gs.scope.startsWith('instagram_') && Array.isArray(gs.target_ids)) {
+              gs.target_ids.forEach((id) => { if (!igIds.includes(id)) igIds.push(id); });
+            }
+          }
+
+          // Consultar cada Page ID autorizado directamente
+          for (const pid of pageIds) {
+            const pRes = await fetch(
+              `https://graph.facebook.com/v22.0/${pid}?fields=id,name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}&access_token=${encodeURIComponent(token)}`
+            );
+            const pData = await pRes.json();
+            if (pRes.ok && !pData.error) {
+              pageId = pData.id || pid;
+              pageName = pData.name || pageName;
+              if (pData.instagram_business_account) {
+                igAccount = pData.instagram_business_account;
+                break;
+              }
+            }
+          }
+
+          // Si aún no tenemos igAccount o queremos enriquecerlo desde igIds directos
+          if (!igAccount && igIds.length > 0) {
+            for (const iid of igIds) {
+              const iRes = await fetch(
+                `https://graph.facebook.com/v22.0/${iid}?fields=id,username,name,profile_picture_url,followers_count,follows_count,media_count&access_token=${encodeURIComponent(token)}`
+              );
+              const iData = await iRes.json();
+              if (iRes.ok && !iData.error && iData.id) {
+                igAccount = iData;
+                break;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback: Si el token es de Página o NPE, consultar /me directo
+    if (!igAccount) {
+      try {
+        const directUrl = `https://graph.facebook.com/v22.0/me?fields=id,name,instagram_business_account{id,username,name,followers_count}&access_token=${encodeURIComponent(token)}`;
         const directRes = await fetch(directUrl);
         const directData = await directRes.json();
         if (directRes.ok && directData.instagram_business_account) {
@@ -873,10 +929,10 @@ app.post('/api/meta/verify-token', async (req, res) => {
       } catch (_) {}
     }
 
-    // 3. Fallback: Consultar Portafolios Comerciales (Meta Business Suite / me/businesses)
+    // 4. Fallback: Consultar Portafolios Comerciales (Meta Business Suite / me/businesses)
     if (!igAccount) {
       try {
-        const bizUrl = `https://graph.facebook.com/v21.0/me/businesses?fields=id,name,instagram_accounts{id,username},client_pages{id,name,instagram_business_account{id,username}},owned_pages{id,name,instagram_business_account{id,username}}&access_token=${encodeURIComponent(token)}`;
+        const bizUrl = `https://graph.facebook.com/v22.0/me/businesses?fields=id,name,instagram_accounts{id,username},client_pages{id,name,instagram_business_account{id,username}},owned_pages{id,name,instagram_business_account{id,username}}&access_token=${encodeURIComponent(token)}`;
         const bizRes = await fetch(bizUrl);
         const bizData = await bizRes.json();
         if (bizRes.ok && bizData.data) {
@@ -904,16 +960,24 @@ app.post('/api/meta/verify-token', async (req, res) => {
         validToken: true,
         pagesFound: 0,
         warning:
-          'Meta devolvió una lista de páginas vacía para este token. En Graph API Explorer cambia "Token del usuario" a tu Página en el desplegable, o escribe tu Instagram Business User ID manualmente.'
+          'Meta devolvió una lista vacía para este token. Asegúrate de marcar tu Página y tu cuenta de Instagram al generar el token en Graph API Explorer.'
       });
     }
 
     db.metaConfig.accessToken = token;
+    if (detectedAppId) db.metaConfig.appId = detectedAppId;
     db.metaConfig.fbPageId = pageId;
-    db.metaConfig.fbPageName = pageName;
+    db.metaConfig.fbPageName = pageName || 'Página Conectada';
     db.metaConfig.igUserId = igAccount.id;
     db.metaConfig.igUsername = igAccount.username || igAccount.name || '';
-    db.metaConfig.wizardSteps.step5_accessToken = true;
+    if (igAccount.followers_count) db.metaConfig.followersCount = igAccount.followers_count;
+    db.metaConfig.wizardSteps = {
+      step1_devAccount: true,
+      step2_igGraphApi: true,
+      step3_testerRole: true,
+      step4_linkFbPage: true,
+      step5_accessToken: true
+    };
 
     addActivityLog(
       db,
