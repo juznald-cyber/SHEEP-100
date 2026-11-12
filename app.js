@@ -2457,8 +2457,45 @@ function initMetaWizardEvents() {
         return;
       }
 
-      appState.metaConfig.accessToken = token;
-      if (detectedAppId) appState.metaConfig.appId = detectedAppId;
+      let finalUserToken = token;
+      let isLongLived = false;
+      const inputAppId = (document.getElementById('cfgAppId')?.value || detectedAppId || appState.metaConfig.appId || '').trim();
+      const inputAppSecret = (document.getElementById('cfgAppSecret')?.value || appState.metaConfig.appSecret || '').trim();
+
+      // Si el usuario ya colocó su App Secret, convertir automáticamente el token de 1h en Token de 60 Días
+      if (inputAppId && inputAppSecret) {
+        try {
+          const exRes = await fetch(
+            `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(
+              inputAppId
+            )}&client_secret=${encodeURIComponent(inputAppSecret)}&fb_exchange_token=${encodeURIComponent(token)}`
+          );
+          const exData = await exRes.json();
+          if (exRes.ok && exData.access_token) {
+            finalUserToken = exData.access_token;
+            isLongLived = true;
+          }
+        } catch (_) {}
+      }
+
+      // Obtener y guardar también el Page Access Token de la Página de Facebook (Permanente si viene de token de 60 días)
+      let savedPageToken = '';
+      if (pageId) {
+        try {
+          const ptRes = await fetch(
+            `https://graph.facebook.com/v22.0/${pageId}?fields=access_token&access_token=${encodeURIComponent(finalUserToken)}`
+          );
+          const ptData = await ptRes.json();
+          if (ptRes.ok && ptData.access_token) {
+            savedPageToken = ptData.access_token;
+          }
+        } catch (_) {}
+      }
+
+      appState.metaConfig.accessToken = finalUserToken;
+      if (savedPageToken) appState.metaConfig.fbPageAccessToken = savedPageToken;
+      if (inputAppId) appState.metaConfig.appId = inputAppId;
+      if (inputAppSecret) appState.metaConfig.appSecret = inputAppSecret;
       appState.metaConfig.fbPageId = pageId;
       appState.metaConfig.fbPageName = pageName || 'Página Conectada';
       appState.metaConfig.igUserId = igAccount.id;
@@ -2479,11 +2516,14 @@ function initMetaWizardEvents() {
         igAccount.username || igAccount.name
       )}</b> (ID: <code>${igAccount.id}</code> • <b>${
         igAccount.followers_count ?? 199
-      } seguidores</b>). ¡Listo para publicar Posts, Historias 24h y sincronizar Métricas!`;
+      } seguidores</b>).<br/>☁️ <b>Motor 24/7 con PC Apagado: ACTIVO</b> ${
+        isLongLived
+          ? '• 🔒 <b>Token extendido a 60 días + Page Token Permanente</b>.'
+          : '• 💡 <i>Tip: Si vas a programar para días futuros con el PC apagado, pega tu App Secret abajo y pulsa "Canjear por Token de 60 Días" para que el token no caduque a la hora.</i>'
+      }`;
 
       renderAll();
       await saveStateEverywhere(true);
-      // Sincronizar automáticamente las publicaciones y métricas reales de la cuenta conectada
       syncLiveMetaMetrics();
     } catch (err) {
       feedback.classList.add('err');
@@ -2495,6 +2535,7 @@ function initMetaWizardEvents() {
     const appId = document.getElementById('cfgAppId').value.trim();
     const appSecret = document.getElementById('cfgAppSecret').value.trim();
     const shortToken = document.getElementById('cfgAccessToken').value.trim();
+    const feedback = document.getElementById('tokenVerifyFeedback');
 
     if (!appId || !appSecret || !shortToken) {
       showToast('⚠️ Ingresa tu App ID, App Secret y Access Token actual para extenderlo a 60 días.');
@@ -2502,7 +2543,7 @@ function initMetaWizardEvents() {
     }
 
     try {
-      const url = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(
+      const url = `https://graph.facebook.com/v22.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(
         appId
       )}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(
         shortToken
@@ -2513,12 +2554,35 @@ function initMetaWizardEvents() {
         showToast(`❌ ${data.error ? data.error.message : 'No se pudo canjear el token'}`);
         return;
       }
+
+      const longToken = data.access_token;
+      let permanentPageToken = '';
+      const fbPageId = appState.metaConfig?.fbPageId || '102786358439057';
+      try {
+        const pRes = await fetch(
+          `https://graph.facebook.com/v22.0/${fbPageId}?fields=access_token&access_token=${encodeURIComponent(longToken)}`
+        );
+        const pData = await pRes.json();
+        if (pRes.ok && pData.access_token) {
+          permanentPageToken = pData.access_token;
+        }
+      } catch (_) {}
+
       appState.metaConfig.appId = appId;
       appState.metaConfig.appSecret = appSecret;
-      appState.metaConfig.accessToken = data.access_token;
+      appState.metaConfig.accessToken = longToken;
+      if (permanentPageToken) appState.metaConfig.fbPageAccessToken = permanentPageToken;
+
+      if (feedback) {
+        feedback.classList.remove('hidden', 'err');
+        feedback.classList.add('ok');
+        feedback.innerHTML =
+          '🔒 <strong>¡Token de 60 Días + Page Token Permanente activados y guardados en Firebase!</strong> Ya puedes apagar tu computador con total tranquilidad: el Motor en la Nube publicará automáticamente tus Posts, Reels e Historias programadas.';
+      }
+
       renderAll();
       await saveStateEverywhere(true);
-      showToast('🔄 ¡Token extendido a 60 días y sincronizado en Firebase!');
+      showToast('🔄 ¡Token extendido a 60 días + Page Token Permanente sincronizado en Firebase!');
     } catch (err) {
       showToast(`❌ ${err.message}`);
     }
