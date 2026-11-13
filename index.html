@@ -3,13 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#6366f1" />
+  <meta name="theme-color" content="#0b0f19" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="SHEEP 100" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>SHEEP 100 — Planificador de Posts, Historias & Métricas</title>
   <link rel="manifest" href="./manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="shortcut icon" href="./favicon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
 
   <!-- Firebase SDK (Cloud Firestore + Auth en Tiempo Real para sheep-100-b8a90) -->
@@ -35,7 +39,7 @@
   <div class="login-screen show" id="loginScreen">
     <div class="login-card">
       <div class="login-badge">
-        <img src="./icon.svg" alt="SHEEP 100" />
+        <img src="./logo.png" alt="SHEEP 100" />
       </div>
       <h2>SHEEP 100</h2>
       <p class="login-sub">Ingresa con tu usuario y contraseña para gestionar tus Posts, Historias y Métricas</p>
@@ -87,7 +91,7 @@
     <!-- SIDEBAR (Desktop & Mobile App Drawer) -->
     <aside class="sidebar" id="appSidebar">
       <div class="brand">
-        <img src="./icon.svg" alt="SHEEP 100 Logo" class="brand-icon" />
+        <img src="./logo.png" alt="SHEEP 100 Logo" class="brand-icon" />
         <div style="flex:1;min-width:0;">
           <h1 class="brand-title">SHEEP 100</h1>
           <span class="brand-subtitle">Posts • Historias • Métricas</span>
@@ -338,7 +342,9 @@
                   <span class="ig-badge">Empresa</span>
                 </div>
                 <div class="ig-profile-row">
-                  <div class="ig-avatar" onclick="openComposerModal({ defaultFormat: 'STORY' })" title="Clic para programar una Historia">🐑</div>
+                  <div class="ig-avatar" onclick="openComposerModal({ defaultFormat: 'STORY' })" title="Clic para programar una Historia">
+                    <img src="./logo.png" alt="SHEEP 100" class="ig-avatar-img" />
+                  </div>
                   <div class="ig-metrics">
                     <div><strong id="igMockPostsCount">128</strong><span>Posts</span></div>
                     <div><strong id="igMockFollowersCount">4.8K</strong><span>Seguidores</span></div>

@@ -1,5 +1,18 @@
-const CACHE_NAME = 'sheep-100-v6';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon.svg'];
+const CACHE_NAME = 'sheep-100-v7';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css',
+  './app.js',
+  './manifest.json',
+  './logo.png',
+  './favicon.png',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png',
+  './apple-touch-icon.png',
+  './icon.svg'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

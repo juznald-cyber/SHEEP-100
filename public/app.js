@@ -1088,7 +1088,7 @@ function renderCalendarMediaDrawer() {
     .map(
       (m) => `
       <div class="drawer-media-item" draggable="true" data-drag-type="media" data-media-id="${m.id}" title="Arrastra al calendario para crear Post o Historia: ${escapeHtml(m.title)}">
-        <img src="${m.url}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./icon.svg'" />
+        <img src="${m.url}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./logo.png'" />
         <div class="media-tag-overlay">${m.format} • ${escapeHtml(m.title)}</div>
       </div>
     `
@@ -1169,7 +1169,7 @@ function renderWeekCalendar() {
             const thumbSrc = getPostThumbnailUrl(p);
             return `
               <div class="cal-post-card status-${p.status} ${storyClass}" draggable="true" data-post-id="${p.id}">
-                ${thumbSrc ? `<img src="${escapeHtml(thumbSrc)}" class="cal-post-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />` : ''}
+                ${thumbSrc ? `<img src="${escapeHtml(thumbSrc)}" class="cal-post-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./logo.png'" />` : ''}
                 <div class="cal-post-time">
                   <span>⏰ ${t}</span>
                   ${getPostFormatBadge(p)}
@@ -1247,7 +1247,7 @@ function isPostVideo(post) {
 }
 
 function getPostThumbnailUrl(post) {
-  if (!post) return './icon.svg';
+  if (!post) return './logo.png';
   if (Array.isArray(post.carouselItems) && post.carouselItems.length > 0) {
     const first = post.carouselItems[0];
     const firstNorm = normalizeCloudMedia(first.url || first.publicUrl || '', first.type || 'image');
@@ -1261,7 +1261,7 @@ function getPostThumbnailUrl(post) {
     }
   }
   const norm = normalizeCloudMedia(post.mediaUrl || post.publicMediaUrl || '', 'image');
-  return norm.thumbUrl || post.mediaUrl || './icon.svg';
+  return norm.thumbUrl || post.mediaUrl || './logo.png';
 }
 
 // ==========================================
@@ -1316,7 +1316,7 @@ function renderPostsQueue() {
       return `
         <div class="queue-row" style="${storyFlag ? 'border-left: 4px solid #ec4899;' : carouselFlag ? 'border-left: 4px solid #06b6d4;' : ''}">
           <div class="queue-row-left">
-            <img src="${escapeHtml(thumbUrl)}" class="queue-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
+            <img src="${escapeHtml(thumbUrl)}" class="queue-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./logo.png'" />
             <div class="queue-row-info">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 ${getPostFormatBadge(p)}
@@ -2274,7 +2274,7 @@ function renderInstagramGrid() {
           (st) => `
         <div class="ig-story-bubble" data-story-id="${st.id}">
           <div class="ig-story-ring">
-            <img src="${st.mediaUrl || './icon.svg'}" referrerpolicy="no-referrer" alt="${escapeHtml(st.title)}" onerror="this.src='./icon.svg'" />
+            <img src="${st.mediaUrl || './logo.png'}" referrerpolicy="no-referrer" alt="${escapeHtml(st.title)}" onerror="this.src='./logo.png'" />
           </div>
           <small>${escapeHtml(st.title)}</small>
         </div>
@@ -2289,7 +2289,7 @@ function renderInstagramGrid() {
         const detailBox = document.getElementById('selectedGridPostDetail');
         detailBox.innerHTML = `
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-            <img src="${st.mediaUrl || './icon.svg'}" style="width:110px;height:190px;object-fit:cover;border-radius:12px;border:2px solid #ec4899;flex-shrink:0;" />
+            <img src="${st.mediaUrl || './logo.png'}" style="width:110px;height:190px;object-fit:cover;border-radius:12px;border:2px solid #ec4899;flex-shrink:0;" />
             <div style="flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:8px;">
               <div>${getPostFormatBadge(st)}</div>
               <strong>${escapeHtml(st.title)}</strong>
@@ -2318,7 +2318,7 @@ function renderInstagramGrid() {
     .map(
       (p) => `
       <div class="ig-cell" draggable="true" data-post-id="${p.id}">
-        <img src="${escapeHtml(getPostThumbnailUrl(p))}" referrerpolicy="no-referrer" alt="${escapeHtml(p.title)}" onerror="this.src='./icon.svg'" />
+        <img src="${escapeHtml(getPostThumbnailUrl(p))}" referrerpolicy="no-referrer" alt="${escapeHtml(p.title)}" onerror="this.src='./logo.png'" />
         <span class="ig-cell-badge">${isPostCarousel(p) ? `🎠${p.carouselItems?.length || ''} ` : ''}${p.status === 'published' ? '✔' : '⏰'}</span>
       </div>
     `
@@ -2695,7 +2695,7 @@ async function syncLiveMetaMetrics(opts = {}) {
             ? igItem.children.data.map((ch, idx) => ({
                 id: ch.id || `slide-${idx}`,
                 title: `Slide ${idx + 1}`,
-                url: ch.thumbnail_url || ch.media_url || './icon.svg',
+                url: ch.thumbnail_url || ch.media_url || './logo.png',
                 publicUrl: ch.media_url || ch.thumbnail_url || '',
                 type: ch.media_type === 'VIDEO' ? 'video' : 'image'
               }))
@@ -2705,7 +2705,7 @@ async function syncLiveMetaMetrics(opts = {}) {
           igItem.thumbnail_url ||
           igItem.media_url ||
           carouselChildren?.[0]?.url ||
-          './icon.svg';
+          './logo.png';
 
         const nextMetrics = {
           reach,
@@ -3177,7 +3177,7 @@ function renderMetricsDashboard() {
         <tr>
           <td data-label="Publicación">
             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-              <img src="${escapeHtml(thumbUrl)}" referrerpolicy="no-referrer" onerror="this.src='./icon.svg'" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;" />
+              <img src="${escapeHtml(thumbUrl)}" referrerpolicy="no-referrer" onerror="this.src='./logo.png'" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;" />
               <div style="min-width:0;flex:1;overflow-wrap:anywhere;">
                 <strong>${escapeHtml(p.title)}</strong>
                 <div style="font-size:0.72rem;color:var(--text-muted);">${new Date(p.publishedAt || p.scheduledAt || p.createdAt).toLocaleDateString('es-ES')}${liveBadge}</div>
@@ -3260,7 +3260,7 @@ function initMediaUploadEvents() {
     const newMedia = {
       id: `media-${Date.now()}`,
       title,
-      url: mediaUrl || './icon.svg',
+      url: mediaUrl || './logo.png',
       publicUrl: publicUrl || '',
       type: file.type.startsWith('video/') ? 'video' : 'image',
       format: ext,
@@ -3332,13 +3332,13 @@ function renderMediaGallery() {
   grid.innerHTML = items
     .map((m) => {
       const norm = normalizeCloudMedia(m.originalUrl || m.url || m.publicUrl || '', m.type);
-      const displayThumb = norm.thumbUrl || m.url || './icon.svg';
+      const displayThumb = norm.thumbUrl || m.url || './logo.png';
       const isDirectVideoFile =
         m.type === 'video' && !norm.isDrive && /\.(mp4|webm|mov)(\?|$)/i.test(displayThumb);
 
       const mediaPreviewHtml = isDirectVideoFile
         ? `<video src="${escapeHtml(displayThumb)}" class="media-card-thumb" muted playsinline preload="metadata" onmouseover="this.play()" onmouseout="this.pause()"></video>`
-        : `<img src="${escapeHtml(displayThumb)}" class="media-card-thumb" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './icon.svg'}';}else{this.src='./icon.svg';}" />`;
+        : `<img src="${escapeHtml(displayThumb)}" class="media-card-thumb" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './logo.png'}';}else{this.src='./logo.png';}" />`;
 
       return `
       <div class="media-card">
@@ -4342,10 +4342,10 @@ function renderCarouselLibraryPicker() {
   picker.innerHTML = appState.mediaLibrary
     .map((m) => {
       const norm = normalizeCloudMedia(m.originalUrl || m.url || m.publicUrl || '', m.type);
-      const thumb = norm.thumbUrl || m.url || './icon.svg';
+      const thumb = norm.thumbUrl || m.url || './logo.png';
       return `
         <button type="button" class="carousel-pick-chip" data-pick-media-id="${m.id}" title="Añadir ${escapeHtml(m.title)} al carrusel">
-          <img src="${escapeHtml(thumb)}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./icon.svg'" />
+          <img src="${escapeHtml(thumb)}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./logo.png'" />
           <span class="carousel-pick-plus">＋</span>
         </button>
       `;
@@ -4397,7 +4397,7 @@ function renderCarouselSlidesUI() {
           (slide, idx) => `
           <div class="carousel-slide-item" data-slide-idx="${idx}">
             <span class="carousel-slide-num">${idx + 1}</span>
-            <img src="${escapeHtml(slide.url)}" class="carousel-slide-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
+            <img src="${escapeHtml(slide.url)}" class="carousel-slide-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./logo.png'" />
             <div class="carousel-slide-meta">
               <strong>${escapeHtml(slide.title)}</strong>
               <small>${slide.type === 'video' ? '🎬 Video MP4' : '🖼️ Imagen'} • Diapositiva ${idx + 1}</small>
@@ -4466,7 +4466,7 @@ function updateComposerCarouselPreview() {
   const mediaHtml =
     slide.type === 'video' && !norm.isDrive
       ? `<video src="${escapeHtml(displayUrl)}" controls muted></video>`
-      : `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Slide ${idx + 1}" onerror="this.src='./icon.svg'" />`;
+      : `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Slide ${idx + 1}" onerror="this.src='./logo.png'" />`;
 
   const dotsHtml = composerCarouselSlides
     .map((_, dIdx) => `<span class="carousel-dot ${dIdx === idx ? 'active' : ''}"></span>`)
@@ -4846,7 +4846,7 @@ function updateComposerPreview(url) {
   if (!norm.isDrive && /\.mp4(\?|$)/i.test(displayUrl)) {
     box.innerHTML = `<video src="${escapeHtml(displayUrl)}" controls muted></video>`;
   } else {
-    box.innerHTML = `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Preview" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './icon.svg'}';}" />`;
+    box.innerHTML = `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Preview" onerror="if(this.dataset.fallback!=='1'){this.dataset.fallback='1';this.src='${norm.driveId ? `https://drive.google.com/thumbnail?id=${norm.driveId}&sz=w1000` : './logo.png'}';}" />`;
   }
 }
 
@@ -4991,7 +4991,7 @@ function initPwaAndNotifications() {
       showToast('🔔 ¡Alertas Push activadas en SHEEP 100!');
       new Notification('SHEEP 100', {
         body: 'Las notificaciones de tus Posts e Historias programadas están activas.',
-        icon: './icon.svg'
+        icon: './logo.png'
       });
     } else {
       showToast('Permiso de notificaciones denegado en el navegador.');
@@ -5010,7 +5010,7 @@ function checkDueNotifications() {
           body: isPostStory(p)
             ? 'Tu Historia 24h ya fue publicada automáticamente.'
             : 'Tu Post programado ya fue publicado automáticamente.',
-          icon: './icon.svg'
+          icon: './logo.png'
         });
       }
     }
