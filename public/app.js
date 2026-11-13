@@ -3383,81 +3383,529 @@ window.deleteMediaItem = async function (id) {
 // ==========================================
 // AI STUDIO (COPIES & STORIES SCRIPTS)
 // ==========================================
-function initAiStudioEvents() {
-  const formAi = document.getElementById('formAiGenerator');
-  formAi.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btnRunAi');
-    btn.disabled = true;
-    btn.textContent = '⏳ Generando propuestas con IA...';
+let aiGenerationCounter = 0;
 
-    const topic = (document.getElementById('aiTopic').value || 'Nuestra marca').trim();
-    const platform = document.getElementById('aiPlatform').value;
-    const tone = document.getElementById('aiTone').value;
-    const cta =
-      document.getElementById('aiCta').value.trim() ||
-      'Responde a esta publicación o historia para enviarte toda la info 👇';
+function renderAiGeminiStatus() {
+  const key = (appState.metaConfig?.geminiApiKey || '').trim();
+  const statusEl = document.getElementById('aiGeminiStatusText');
+  const pillBtn = document.getElementById('btnToggleAiKeyBox');
+  const quickInput = document.getElementById('aiQuickGeminiKey');
 
-    try {
-      const defaultHashtags = `#sheep100 #estrategiadigital #creadoresdecontenido #marketingdigital #emprendedores #marcapersonal`;
-      const options = [
-        {
-          title: `Opción 1: Post de Alto Impacto (${tone})`,
-          caption: `¿Sabías que la clave en ${topic} está en los detalles que casi nadie aplica? 🚀✨\n\nHoy te compartimos los 3 pilares que están marcando la diferencia:\n\n1️⃣ Claridad desde el primer segundo.\n2️⃣ Consistencia visual que transmite confianza.\n3️⃣ Automatización inteligente con SHEEP 100.\n\n💡 ${cta}\n\n${defaultHashtags}`,
-          firstComment: `🔥 Si quieres más tips sobre "${topic}", comenta "QUIERO" aquí abajo.`
-        },
-        {
-          title: `Opción 2: Guion de Historia 24h (Story con Gancho + Encuesta)`,
-          caption: `⭕ [TEXTO EN PANTALLA DE HISTORIA]:\n"Atención si buscas mejorar en ${topic} 👀🔥"\n\n✨ Beneficio directo en menos de 15 segundos.\n\n👉 [STICKER / LLAMADO A LA ACCIÓN]:\n${cta}`,
-          firstComment: `Sticker de Encuesta sugerido: "¿Te gustaría verlo paso a paso? [¡SÍ, CLARO! / CUÉNTAME MÁS]"`
-        },
-        {
-          title: `Opción 3: Formato Dinámico Reels / Carrusel`,
-          caption: `Guarda esto antes de seguir haciendo scroll 📌🔥\n\nAsí transformamos ${topic} en resultados reales:\n\n✅ Paso 1: Define tu objetivo\n✅ Paso 2: Prepara tus Posts e Historias en bloque\n✅ Paso 3: Mide tus métricas en SHEEP 100\n\n👉 ${cta}\n\n${defaultHashtags}`,
-          firstComment: `Comparte este post con alguien que necesite verlo hoy 🚀`
+  if (statusEl) {
+    statusEl.textContent = key ? '🟢 Gemini 2.5 Flash Activo' : '⚡ Motor Local · Conectar Gemini';
+  }
+  if (pillBtn) {
+    pillBtn.classList.toggle('connected', Boolean(key));
+  }
+  if (quickInput && document.activeElement !== quickInput) {
+    quickInput.value = key;
+  }
+}
+
+function buildDynamicHashtagsForTopic(topic, seed = 0) {
+  const stopWords = new Set([
+    'para', 'como', 'sobre', 'nuestra', 'nuestro', 'nuestros', 'nuestras', 'todo', 'toda',
+    'todos', 'esta', 'este', 'estos', 'estas', 'con', 'por', 'una', 'unos', 'unas', 'desde', 'hasta'
+  ]);
+  const words = String(topic || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !stopWords.has(w));
+
+  const topicTags = [...new Set(words)].slice(0, 4).map((w) => `#${w}`);
+  const pool = [
+    '#marketingdigital', '#contenidoquevende', '#redessociales', '#estrategiadigital',
+    '#creadoresdecontenido', '#marcapersonal', '#emprendedores', '#negociosonline',
+    '#instagrowth', '#ideasdecontenido', '#communitymanager', '#copywriting'
+  ];
+  const rotatedPool = [];
+  for (let i = 0; i < 6; i++) {
+    rotatedPool.push(pool[(seed * 3 + i) % pool.length]);
+  }
+  return [...new Set([...topicTags, ...rotatedPool, '#sheep100'])].join(' ');
+}
+
+function buildSmartVariedAiOptions({ topic, platform, tone, cta, emojiStyle = 'rich', seed = 0, previousTitles = [] }) {
+  const isCarousel = /carrusel|slide/i.test(platform);
+  const isStory = /historia|story|stories/i.test(platform);
+  const isVideo = /reel|tiktok/i.test(platform);
+  const rich = emojiStyle !== 'minimal';
+  const e = (r, m = '') => (rich ? r : m);
+  const hashtags = buildDynamicHashtagsForTopic(topic, seed);
+
+  const toneHookMap = {
+    'Cercano y Magnético': [
+      `Hablemos claro sobre ${topic} ${e('✨💬')}`,
+      `Esto te va a ahorrar horas con ${topic} ${e('🙌💡')}`,
+      `¿Te pasa esto cuando trabajas en ${topic}? ${e('👀👇')}`
+    ],
+    'Profesional y Experto': [
+      `3 criterios clave para dominar ${topic} ${e('📊✅')}`,
+      `Lo que separa un resultado promedio de uno sólido en ${topic} ${e('🎯')}`,
+      `Guía práctica sobre ${topic} que conviene guardar ${e('📌')}`
+    ],
+    'Venta Directa y Urgencia': [
+      `Último aviso sobre ${topic} ${e('🔥⏰')}`,
+      `No dejes pasar esta oportunidad en ${topic} ${e('🚀💥')}`,
+      `Disponible por tiempo limitado: ${topic} ${e('🏷️⚡')}`
+    ],
+    'Viral y Dinámico': [
+      `Nadie te cuenta esta parte de ${topic}… ${e('🤯🔥')}`,
+      `Guarda esto antes de seguir deslizando ${e('📌⚡')}`,
+      `Probamos un enfoque distinto en ${topic} y mira lo que pasó ${e('👀🚀')}`
+    ]
+  };
+  const hooks = toneHookMap[tone] || toneHookMap['Cercano y Magnético'];
+  const pickHook = (offset) => hooks[(seed + offset) % hooks.length];
+
+  const allCandidates = [];
+
+  if (isCarousel) {
+    allCandidates.push(
+      {
+        angleKey: 'carousel_steps',
+        title: `Carrusel Paso a Paso (${tone})`,
+        caption: `${pickHook(0)}\n\nDesliza para ver el método completo 👉\n\n[SLIDE 1 - PORTADA]: El mapa rápido sobre ${topic}\n[SLIDE 2]: El error más común que frena tus resultados\n[SLIDE 3]: Qué cambiar hoy mismo paso a paso\n[SLIDE 4]: Ejemplo práctico aplicado\n[SLIDE 5 - CIERRE]: ${cta}\n\n${hashtags}`,
+        firstComment: `¿En qué slide te quedaste pensando? Cuéntanos abajo 👇`
+      },
+      {
+        angleKey: 'carousel_myths',
+        title: `Carrusel Mito vs. Realidad`,
+        caption: `Dejemos de repetir mitos sobre ${topic} ${e('🚫✅')}\n\n[SLIDE 1]: Lo que todos creen vs. lo que funciona hoy\n[SLIDE 2]: ❌ Mito: "Necesitas complicarlo todo" → ✅ Realidad: simplicidad + constancia\n[SLIDE 3]: ❌ Mito: "No se puede medir rápido" → ✅ Realidad: datos claros cada semana\n[SLIDE 4]: Tu siguiente paso concreto\n\n💡 ${cta}\n\n${hashtags}`,
+        firstComment: `Guarda este carrusel para volver a consultarlo cuando publiques 📌`
+      },
+      {
+        angleKey: 'carousel_checklist',
+        title: `Carrusel Checklist Accionable`,
+        caption: `Checklist listo para aplicar hoy en ${topic} ${e('📋✨')}\n\n[SLIDE 1]: 4 puntos que revisamos antes de lanzar\n[SLIDE 2]: ✔️ Objetivo y audiencia bien definidos\n[SLIDE 3]: ✔️ Mensaje claro en los primeros 3 segundos\n[SLIDE 4]: ✔️ Llamado a la acción directo: ${cta}\n\n${hashtags}`,
+        firstComment: `Comparte esto con alguien del equipo que necesite este checklist 🤝`
+      }
+    );
+  }
+
+  if (isStory) {
+    allCandidates.push(
+      {
+        angleKey: 'story_poll',
+        title: `Secuencia 3 Historias (Gancho + Encuesta)`,
+        caption: `[HISTORIA 1 - GANCHO]:\n"${pickHook(1)}"\n\n[HISTORIA 2 - VALOR EN 10 SEG]:\nMuestra en foto o video corto cómo resolvemos ${topic} paso a paso ${e('✨')}\n\n[HISTORIA 3 - STICKER + CTA]:\nSticker Encuesta: "¿Lo aplicamos juntos? [¡SÍ, QUIERO! / CUÉNTAME MÁS]"\nTexto: ${cta}`,
+        firstComment: `Tip Historia: Agrega sticker de respuesta rápida o enlace en la Historia 3.`
+      },
+      {
+        angleKey: 'story_behind',
+        title: `Historias Detrás de Cámaras + Prueba`,
+        caption: `[HISTORIA 1 - REALIDAD]:\nFoto natural preparando ${topic} — "Así se ve por dentro hoy ${e('👀')}"\n\n[HISTORIA 2 - BENEFICIO]:\n"Lo mejor: sin vueltas ni perder horas"\n\n[HISTORIA 3 - ACCIÓN]:\nCaja de Preguntas o DM directo: "${cta}"`,
+        firstComment: `Usa menciones o sticker de ubicación en Historia 1 para subir el alcance.`
+      }
+    );
+  }
+
+  if (isVideo) {
+    allCandidates.push(
+      {
+        angleKey: 'video_hook',
+        title: `Guion Reel/TikTok (Hook 3s + Ritmo Rápido)`,
+        caption: `[HOOK 0-3s EN PANTALLA]: "Si todavía haces ${topic} así, mira esto ${e('✋⚡')}"\n[DESARROLLO 3-18s]: Explica 2 ajustes concretos mientras muestras pantalla o producto.\n[CIERRE 18-25s]: "${cta}"\n\n--- COPY DESCRIPCIÓN ---\n${pickHook(2)} ${cta}\n\n${hashtags}`,
+        firstComment: `¿Quieres que subamos la parte 2 sobre ${topic}? Comenta "PARTE 2" ${e('🎬')}`
+      },
+      {
+        angleKey: 'video_list',
+        title: `Video Corto 3 Claves Express`,
+        caption: `[TEXTO EN PORTADA]: 3 cosas que cambiaron todo en ${topic} ${e('🚀')}\n[CLAVE 1]: Empieza por el resultado visual.\n[CLAVE 2]: Simplifica el mensaje.\n[CLAVE 3]: Repite lo que ya te dio alcance.\n\nCopy: ${cta}\n\n${hashtags}`,
+        firstComment: `Guarda el video para tener las 3 claves a mano 📌`
+      }
+    );
+  }
+
+  // Angles válidos para cualquier formato (y variar aún más cuando regenere)
+  allCandidates.push(
+    {
+      angleKey: 'aida_direct',
+      title: `Fórmula AIDA (${tone})`,
+      caption: `${pickHook(0)}\n\nEn lugar de perder tiempo probando al azar con ${topic}, concéntrate en lo que genera respuesta real hoy:\n\n${e('1️⃣ ', '• ')}Una promesa clara que conecte con tu cliente.\n${e('2️⃣ ', '• ')}Prueba o ejemplo visual imposible de ignorar.\n${e('3️⃣ ', '• ')}Un paso siguiente súper fácil.\n\n${e('👉 ')}${cta}\n\n${hashtags}`,
+      firstComment: `¿Cuál de estos 3 puntos vas a aplicar primero en tu cuenta? Te leo 👇`
+    },
+    {
+      angleKey: 'pas_problem',
+      title: `Problema → Solución en ${topic}`,
+      caption: `¿Sientes que le dedicas tiempo a ${topic} pero el alcance no acompaña? ${e('😮‍💨')}\n\nMuchas veces no falta esfuerzo: falta enfoque en los detalles que realmente hacen que la gente se detenga, guarde y responda.\n\nLa solución práctica para esta semana:\n${e('✅ ')}Simplifica la idea principal.\n${e('✅ ')}Cierra con una invitación directa.\n\n${e('💡 ')}${cta}\n\n${hashtags}`,
+      firstComment: `Si este cambio te sirvió, envíaselo a alguien que esté trabajando en ${topic} 🔄`
+    },
+    {
+      angleKey: 'storytelling_shift',
+      title: `Storytelling & Aprendizaje Real`,
+      caption: `Algo importante que aprendimos trabajando con ${topic} ${e('✍️✨')}:\n\nCuando dejábamos todo para última hora, el mensaje salía apurado. En cambio, al planificar con intención y medir qué funciona mejor, cada publicación empieza a sumar de verdad.\n\nMenos improvisación. Más claridad y conexión.\n\n${e('📌 ')}${cta}\n\n${hashtags}`,
+      firstComment: `¿Prefieres planificar la semana completa o publicar día a día? Cuéntanos abajo 💬`
+    },
+    {
+      angleKey: 'list_top3',
+      title: `Lista Práctica: 3 Movidas Ganadoras`,
+      caption: `${pickHook(1)}\n\nToma nota para tu próxima publicación sobre ${topic}:\n\n${e('🔹 ')}Gancho concreto en la primera línea (sin rodeos).\n${e('🔹 ')}Beneficio visible en segundos.\n${e('🔹 ')}Llamado a la acción único: ${cta}\n\nGuárdalo para usarlo hoy ${e('🔖')}\n\n${hashtags}`,
+      firstComment: `🔥 Tip extra: responde los primeros comentarios en los primeros 30 minutos.`
+    },
+    {
+      angleKey: 'contrarian',
+      title: `Ángulo Disruptivo ("Lo que nadie te dice")`,
+      caption: `${pickHook(2)}\n\nNo necesitas publicar todos los días sin rumbo para crecer con ${topic}. Necesitas piezas mejor pensadas, con ritmo, estética cuidada y un mensaje que invite a conversar.\n\nHaz la prueba con tu próximo contenido y mira cómo cambia la interacción ${e('📈')}\n\n${e('👉 ')}${cta}\n\n${hashtags}`,
+      firstComment: `¿Estás de acuerdo o prefieres otro enfoque? Abramos debate 👇`
+    }
+  );
+
+  // Filtrar ángulos que ya se mostraron en la tanda anterior para que al regenerar cambien de verdad
+  const prevSet = new Set(previousTitles || []);
+  let freshPool = allCandidates.filter((item) => !prevSet.has(item.title));
+  if (freshPool.length < 3) {
+    freshPool = [...allCandidates];
+  }
+
+  // Rotar según variationSeed
+  const chosen = [];
+  for (let i = 0; i < Math.min(3, freshPool.length); i++) {
+    const idx = (seed + i) % freshPool.length;
+    if (!chosen.includes(freshPool[idx])) {
+      chosen.push(freshPool[idx]);
+    }
+  }
+  while (chosen.length < 3 && chosen.length < allCandidates.length) {
+    const extra = allCandidates.find((c) => !chosen.includes(c));
+    if (!extra) break;
+    chosen.push(extra);
+  }
+
+  return chosen.map((item, i) => ({
+    title: `Propuesta ${i + 1}: ${item.title}`,
+    rawTitle: item.title,
+    caption: item.caption,
+    firstComment: item.firstComment
+  }));
+}
+
+async function callGeminiDirectForCopies({ apiKey, topic, platform, tone, cta, emojiStyle, variationSeed, previousProposals = [] }) {
+  const avoidBlock =
+    previousProposals.length > 0
+      ? `\nPROPUESTAS ANTERIORES QUE DEBES EVITAR REPETIR (crea enfoques, estructuras y primeras líneas 100% diferentes):\n${previousProposals
+          .map((p, i) => `- ${i + 1}: ${p.title} -> "${String(p.caption || '').slice(0, 90)}"`)
+          .join('\n')}`
+      : '';
+
+  const emojiInstruction =
+    emojiStyle === 'minimal'
+      ? 'Usa muy pocos emojis (solo 1 o 2 sutiles en todo el texto).'
+      : 'Incluye emojis estratégicos, naturales y bien distribuidos.';
+
+  const prompt = `Eres un director creativo y copywriter experto para redes sociales en español.
+Tema del usuario: "${topic}"
+Formato destino: "${platform}" (adapta la estructura exactamente a este formato: por ejemplo si es Carrusel divide el copy o notas por [SLIDE 1]..[SLIDE 5]; si es Historias divide en [HISTORIA 1..3] + Sticker; si es Reel/TikTok incluye [HOOK 0-3s] + [GUION] + [COPY]; si es Post/Facebook redacta un copy completo listo para publicar).
+Tono: "${tone}".
+Llamado a la acción (CTA): "${cta}".
+${emojiInstruction}
+Semilla de variación creativa: #${variationSeed} (timestamp ${Date.now()}).
+${avoidBlock}
+
+Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas entre sí (distintos hooks, ángulos psicológicos y estructura):
+{
+  "options": [
+    { "title": "Título corto descriptivo del enfoque", "caption": "Copy completo listo para usar con saltos de línea y hashtags relevantes al final", "firstComment": "Sugerencia de primer comentario o sticker" }
+  ]
+}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+      apiKey
+    )}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 1.05,
+          topP: 0.95
         }
-      ];
-      renderAiOptions({ options });
-    } catch (err) {
-      showToast(`❌ Error generando copy: ${err.message}`);
-    } finally {
+      })
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data?.error?.message || `Error Gemini HTTP ${res.status}`);
+  }
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) {
+    throw new Error('Gemini no devolvió texto en la respuesta.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (_) {
+    const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    parsed = JSON.parse(cleanJson);
+  }
+
+  if (!Array.isArray(parsed?.options) || parsed.options.length === 0) {
+    throw new Error('La respuesta de Gemini no incluyó propuestas válidas.');
+  }
+  return parsed.options.slice(0, 3);
+}
+
+async function runAiGeneration({ regenerate = false } = {}) {
+  const btn = document.getElementById('btnRunAi');
+  const regenBtn = document.getElementById('btnRegenerateAi');
+  const topicInput = document.getElementById('aiTopic');
+  const topic = (topicInput?.value || '').trim();
+
+  if (!topic) {
+    showToast('⚠️ Escribe primero de qué trata tu Post o Historia.');
+    topicInput?.focus();
+    return;
+  }
+
+  const platform = document.getElementById('aiPlatform')?.value || 'Post de Instagram Feed';
+  const tone = document.getElementById('aiTone')?.value || 'Cercano y Magnético';
+  const cta =
+    (document.getElementById('aiCta')?.value || '').trim() ||
+    'Responde a esta publicación o historia para enviarte toda la info 👇';
+  const emojiStyle = document.getElementById('aiEmojiStyle')?.value || 'rich';
+
+  const previousProposals = Array.isArray(window._lastAiOptions) ? window._lastAiOptions : [];
+  const previousTitles = previousProposals.map((p) => p.rawTitle || p.title || '');
+  aiGenerationCounter += 1;
+  const variationSeed = aiGenerationCounter + Math.floor(Math.random() * 100);
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = regenerate ? '⏳ Regenerando otras 3 ideas...' : '⏳ Generando propuestas con IA...';
+  }
+  if (regenBtn) regenBtn.disabled = true;
+
+  try {
+    const geminiKey = (appState.metaConfig?.geminiApiKey || '').trim();
+    let options = null;
+    let source = 'local-varied';
+    let fallbackReason = '';
+
+    // 1. Llamar directamente a Google Gemini 2.5 Flash si hay API Key configurada
+    if (geminiKey) {
+      try {
+        options = await callGeminiDirectForCopies({
+          apiKey: geminiKey,
+          topic,
+          platform,
+          tone,
+          cta,
+          emojiStyle,
+          variationSeed,
+          previousProposals
+        });
+        source = 'gemini';
+      } catch (gemErr) {
+        fallbackReason = gemErr.message || 'Error conectando con Gemini API';
+      }
+    }
+
+    // 2. Respaldo en backend local (si corre en localhost:3000 y aún no obtuvimos respuesta de Gemini)
+    if (!options && window.location.protocol.startsWith('http') && !window.location.hostname.includes('web.app')) {
+      try {
+        const res = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic,
+            tone,
+            platform,
+            includeEmojis: emojiStyle !== 'minimal',
+            callToAction: cta,
+            variationSeed,
+            previousTitles
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.options) && data.options.length > 0) {
+            options = data.options;
+            source = data.source || 'server-engine';
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Motor Creativo Variado (cuando no hay Gemini Key o falló)
+    if (!options) {
+      options = buildSmartVariedAiOptions({
+        topic,
+        platform,
+        tone,
+        cta,
+        emojiStyle,
+        seed: aiGenerationCounter,
+        previousTitles
+      });
+      source = 'local-varied';
+    }
+
+    renderAiOptions({ options, source, fallbackReason, variationNumber: aiGenerationCounter });
+    if (window.innerWidth <= 960 || document.body.classList.contains('mobile-app-mode')) {
+      document.querySelector('#tab-ai .ai-results-header')?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+  } catch (err) {
+    showToast(`❌ Error generando copy: ${err.message}`);
+  } finally {
+    if (btn) {
       btn.disabled = false;
       btn.textContent = '✨ Generar 3 Propuestas + Hashtags';
     }
+    if (regenBtn) regenBtn.disabled = false;
+  }
+}
+
+function clearAiResults() {
+  window._lastAiOptions = [];
+  const container = document.getElementById('aiResultsContainer');
+  document.getElementById('btnRegenerateAi')?.classList.add('hidden');
+  document.getElementById('btnClearAiResults')?.classList.add('hidden');
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>Resultados limpiados 🧹. Ajusta tu idea o pulsa <strong>"Generar 3 Propuestas + Hashtags"</strong> para crear nuevas opciones.</p>
+      </div>
+    `;
+  }
+}
+
+function initAiStudioEvents() {
+  const formAi = document.getElementById('formAiGenerator');
+  formAi?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await runAiGeneration({ regenerate: false });
   });
+
+  document.getElementById('btnRegenerateAi')?.addEventListener('click', async () => {
+    await runAiGeneration({ regenerate: true });
+  });
+
+  document.getElementById('btnClearAiResults')?.addEventListener('click', () => {
+    clearAiResults();
+    showToast('🧹 Propuestas generadas limpiadas');
+  });
+
+  document.getElementById('btnClearAiAll')?.addEventListener('click', () => {
+    const topicEl = document.getElementById('aiTopic');
+    const ctaEl = document.getElementById('aiCta');
+    if (topicEl) topicEl.value = '';
+    if (ctaEl) ctaEl.value = '';
+    clearAiResults();
+    topicEl?.focus();
+    showToast('🧹 Estudio IA limpiado por completo');
+  });
+
+  document.getElementById('btnToggleAiKeyBox')?.addEventListener('click', () => {
+    const box = document.getElementById('aiKeyConfigBox');
+    box?.classList.toggle('hidden');
+    renderAiGeminiStatus();
+  });
+
+  document.getElementById('btnSaveAiGeminiKey')?.addEventListener('click', async () => {
+    const keyVal = (document.getElementById('aiQuickGeminiKey')?.value || '').trim();
+    appState.metaConfig = {
+      ...(appState.metaConfig || {}),
+      geminiApiKey: keyVal
+    };
+    const cfgInput = document.getElementById('cfgGeminiKey');
+    if (cfgInput) cfgInput.value = keyVal;
+    renderAiGeminiStatus();
+    document.getElementById('aiKeyConfigBox')?.classList.add('hidden');
+    await saveStateEverywhere(false);
+    showToast(keyVal ? '🤖 ¡Gemini API Key guardada! Ya puedes generar con IA real.' : '⚡ Gemini Key borrada (usando motor local variado).');
+  });
+
+  renderAiGeminiStatus();
 }
 
 function renderAiOptions(data) {
   const container = document.getElementById('aiResultsContainer');
   const options = data.options || [];
+  const source = data.source || 'local-varied';
+  const fallbackReason = data.fallbackReason || '';
+  const variationNumber = data.variationNumber || 1;
 
-  container.innerHTML = options
-    .map(
-      (opt, idx) => `
+  document.getElementById('btnRegenerateAi')?.classList.toggle('hidden', options.length === 0);
+  document.getElementById('btnClearAiResults')?.classList.toggle('hidden', options.length === 0);
+
+  let bannerHtml = '';
+  if (source === 'gemini') {
+    bannerHtml = `
+      <div class="ai-source-banner gemini">
+        <span>🤖 <strong>Generado en vivo con Gemini 2.5 Flash</strong> • Ronda #${variationNumber}</span>
+        <span>Enfoques frescos aplicados</span>
+      </div>
+    `;
+  } else if (fallbackReason) {
+    bannerHtml = `
+      <div class="ai-source-banner warn">
+        <span>⚠️ <strong>Gemini devolvió error:</strong> ${escapeHtml(fallbackReason)} (usando Motor Creativo Variado #${variationNumber})</span>
+        <button type="button" class="btn-outline btn-sm" onclick="document.getElementById('aiKeyConfigBox')?.classList.remove('hidden')">🔑 Revisar Key</button>
+      </div>
+    `;
+  } else {
+    bannerHtml = `
+      <div class="ai-source-banner">
+        <span>⚡ <strong>Motor Creativo Variado (sin Gemini API Key)</strong> • Ronda #${variationNumber}</span>
+        <button type="button" class="btn-outline btn-sm" onclick="document.getElementById('aiKeyConfigBox')?.classList.remove('hidden')">🔑 Conectar Gemini Real</button>
+      </div>
+    `;
+  }
+
+  container.innerHTML =
+    bannerHtml +
+    options
+      .map(
+        (opt, idx) => `
       <div class="ai-option-card">
         <h4>${escapeHtml(opt.title || `Propuesta ${idx + 1}`)}</h4>
         <pre>${escapeHtml(opt.caption)}</pre>
+        ${
+          opt.firstComment
+            ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;overflow-wrap:anywhere;">💬 <em>Primer comentario / Sticker:</em> ${escapeHtml(opt.firstComment)}</div>`
+            : ''
+        }
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn-primary btn-sm" onclick="useAiCopyInComposer(${idx}, 'POST')">
-            📸 Usar en Nuevo Post
+          <button type="button" class="btn-primary btn-sm" onclick="useAiCopyInComposer(${idx}, 'POST')">
+            📸 Post
           </button>
-          <button class="btn-secondary btn-sm" onclick="useAiCopyInComposer(${idx}, 'CAROUSEL')">
-            🎠 Usar en Carrusel
+          <button type="button" class="btn-secondary btn-sm" onclick="useAiCopyInComposer(${idx}, 'CAROUSEL')">
+            🎠 Carrusel
           </button>
-          <button class="btn-story-sm" onclick="useAiCopyInComposer(${idx}, 'STORY')">
-            ⭕ Usar en Nueva Historia
+          <button type="button" class="btn-secondary btn-sm" onclick="useAiCopyInComposer(${idx}, 'REEL')">
+            🎬 Reel
           </button>
-          <button class="btn-secondary btn-sm" onclick="copyText(${JSON.stringify(opt.caption)})">
+          <button type="button" class="btn-story-sm" onclick="useAiCopyInComposer(${idx}, 'STORY')">
+            ⭕ Historia
+          </button>
+          <button type="button" class="btn-outline btn-sm" onclick="copyAiOption(${idx})">
             📋 Copiar
           </button>
         </div>
       </div>
     `
-    )
-    .join('');
+      )
+      .join('');
 
   window._lastAiOptions = options;
 }
+
+window.copyAiOption = async function (idx) {
+  const opt = window._lastAiOptions?.[idx];
+  if (!opt?.caption) return;
+  await window.copyText(opt.caption);
+};
 
 window.useAiCopyInComposer = function (idx, format = 'POST') {
   const opt = window._lastAiOptions?.[idx];
@@ -3847,6 +4295,7 @@ function renderMetaWizardState() {
   setValIfIdle('cfgAppId', cfg.appId);
   setValIfIdle('cfgAppSecret', cfg.appSecret);
   setValIfIdle('cfgGeminiKey', cfg.geminiApiKey);
+  if (typeof renderAiGeminiStatus === 'function') renderAiGeminiStatus();
 
   const autoChk = document.getElementById('cfgAutoPublish');
   if (autoChk) autoChk.checked = cfg.autoPublishEnabled !== false;

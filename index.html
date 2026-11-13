@@ -541,10 +541,24 @@
         <section class="tab-panel" id="tab-ai">
           <div class="ai-studio-layout">
             <div class="card">
-              <h3>✨ Generador y Optimizador de Textos con IA</h3>
+              <div class="ai-card-head">
+                <h3>✨ Generador y Optimizador de Textos con IA</h3>
+                <button type="button" class="ai-gemini-pill" id="btnToggleAiKeyBox" title="Configurar Gemini API Key">
+                  <span id="aiGeminiStatusText">⚡ Motor Creativo Local</span>
+                </button>
+              </div>
               <p class="muted-text">
-                Genera copies persuasivos para Posts, guiones cortos para Historias (secuencias de 3 historias) y bloques de hashtags optimizados.
+                Genera copies persuasivos para Posts, guiones por diapositiva para Carruseles, Historias 24h o Reels y bloques de hashtags optimizados.
               </p>
+
+              <div class="ai-key-box hidden" id="aiKeyConfigBox">
+                <label for="aiQuickGeminiKey">🔑 Gemini API Key (Google AI Studio — gratis, para respuestas 100% con Gemini 2.5 Flash)</label>
+                <div class="ai-key-row">
+                  <input type="password" id="aiQuickGeminiKey" placeholder="AIzaSy... (Pega tu clave de Gemini aquí)" />
+                  <button type="button" class="btn-primary btn-sm" id="btnSaveAiGeminiKey">💾 Guardar Key</button>
+                </div>
+                <small class="muted-text">Se sincroniza automáticamente con tu cuenta en la nube y con la configuración de Paso a Paso Meta.</small>
+              </div>
 
               <form id="formAiGenerator" class="ai-form">
                 <label>¿Sobre qué trata tu Post o Historia?</label>
@@ -555,9 +569,11 @@
                     <label>Formato Destino</label>
                     <select id="aiPlatform">
                       <option value="Post de Instagram Feed">📸 Post de Instagram Feed</option>
+                      <option value="Carrusel Deslizable de Instagram (2 a 10 slides)">🎠 Carrusel de Instagram (Slides)</option>
                       <option value="Secuencia de Historias (Stories 24h)">⭕ Historias de Instagram (Stories 24h)</option>
                       <option value="Instagram Reels">🎬 Instagram Reels</option>
                       <option value="Facebook Page">📘 Facebook Page</option>
+                      <option value="TikTok">🎵 TikTok (Guion + Copy)</option>
                     </select>
                   </div>
                   <div>
@@ -571,12 +587,28 @@
                   </div>
                 </div>
 
-                <label>Llamado a la Acción (CTA)</label>
-                <input type="text" id="aiCta" placeholder="Ej: Responde esta historia con la palabra QUIERO y te enviamos el cupón" />
+                <div class="form-row-2">
+                  <div>
+                    <label>Llamado a la Acción (CTA)</label>
+                    <input type="text" id="aiCta" placeholder="Ej: Comenta QUIERO y te enviamos la info" />
+                  </div>
+                  <div>
+                    <label>Estilo de Emojis</label>
+                    <select id="aiEmojiStyle">
+                      <option value="rich">✨ Emojis expresivos y claros</option>
+                      <option value="minimal">⚡ Pocos emojis (minimalista)</option>
+                    </select>
+                  </div>
+                </div>
 
-                <button type="submit" class="btn-primary full-width" id="btnRunAi">
-                  ✨ Generar 3 Propuestas + Hashtags
-                </button>
+                <div class="ai-form-actions">
+                  <button type="submit" class="btn-primary" id="btnRunAi" style="flex:1;">
+                    ✨ Generar 3 Propuestas + Hashtags
+                  </button>
+                  <button type="button" class="btn-outline" id="btnClearAiAll" title="Limpiar formulario y propuestas">
+                    🧹 Limpiar
+                  </button>
+                </div>
               </form>
 
               <div class="hashtag-manager">
@@ -586,10 +618,20 @@
             </div>
 
             <div class="card">
-              <h3>📝 Resultados Generados</h3>
+              <div class="ai-results-header">
+                <h3>📝 Resultados Generados</h3>
+                <div class="ai-results-toolbar">
+                  <button type="button" class="btn-secondary btn-sm hidden" id="btnRegenerateAi" title="Generar 3 propuestas distintas a las actuales">
+                    🔄 Volver a Generar
+                  </button>
+                  <button type="button" class="btn-outline btn-sm hidden" id="btnClearAiResults" title="Limpiar las propuestas generadas">
+                    🧹 Limpiar
+                  </button>
+                </div>
+              </div>
               <div id="aiResultsContainer" class="ai-results-container">
                 <div class="empty-state">
-                  <p>Escribe tu idea a la izquierda y pulsa <strong>"Generar 3 Propuestas"</strong>. Podrás enviarlas como Post o como Historia con un clic.</p>
+                  <p>Escribe tu idea a la izquierda y pulsa <strong>"Generar 3 Propuestas"</strong>. Podrás usarlas, limpiarlas o volver a generarlas con ángulos distintos.</p>
                 </div>
               </div>
             </div>

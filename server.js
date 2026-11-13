@@ -1841,25 +1841,39 @@ app.post('/api/meta/exchange-token', async (req, res) => {
   }
 });
 
-// AI Copy & Hashtags Generator (Supports Gemini API + Built-in Smart Copywriter)
+// AI Copy & Hashtags Generator (Supports Gemini API + Dynamic Multi-Angle Engine)
 app.post('/api/ai/generate', async (req, res) => {
-  const { topic, tone, platform, includeEmojis, callToAction } = req.body;
+  const {
+    topic,
+    tone,
+    platform,
+    includeEmojis,
+    callToAction,
+    variationSeed = 0,
+    previousTitles = []
+  } = req.body;
   const db = readDb();
   const cleanTopic = (topic || 'Nuestro producto o servicio estrella').trim();
   const selectedTone = tone || 'profesional';
   const selectedPlatform = platform || 'instagram';
+  const seedNum = Number(variationSeed) || Math.floor(Math.random() * 1000);
 
   // If user configured a Gemini API key, call Gemini 2.5 Flash
   if (db.metaConfig.geminiApiKey && db.metaConfig.geminiApiKey.trim()) {
     try {
+      const avoidList =
+        Array.isArray(previousTitles) && previousTitles.length > 0
+          ? `\nNO repitas estos títulos o enfoques anteriores: ${previousTitles.join(' | ')}. Crea ideas completamente nuevas.`
+          : '';
       const prompt = `Actúa como un estratega experto en redes sociales y copywriter para ${selectedPlatform}.
-Genera 3 opciones de copy atractivas sobre el tema: "${cleanTopic}".
+Genera 3 opciones de copy MUY distintas entre sí sobre el tema: "${cleanTopic}".
 Tono: ${selectedTone}.
 Objetivo / Llamado a la acción: ${callToAction || 'Generar interacción y guardados'}.
 ${includeEmojis !== false ? 'Incluye emojis estratégicos y saltos de línea limpios.' : 'Usa pocos emojis.'}
-Al final incluye una lista de 12 hashtags altamente relevantes.
+Semilla de variación: ${seedNum}.${avoidList}
+Al final incluye hashtags relevantes al tema.
 Devuelve el resultado en formato JSON con las claves:
-{ "options": [{ "title": "...", "caption": "...", "firstComment": "..." }], "hashtags": "#tag1 #tag2 ..." }`;
+{ "options": [{ "title": "...", "caption": "...", "firstComment": "..." }] }`;
 
       const geminiRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
@@ -1870,7 +1884,11 @@ Devuelve el resultado en formato JSON con las claves:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json' }
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 1.05,
+              topP: 0.95
+            }
           })
         }
       );
@@ -1885,39 +1903,67 @@ Devuelve el resultado en formato JSON con las claves:
     }
   }
 
-  // Built-in Smart Copywriting Templates tailored by tone & platform
+  // Varied Multi-Angle Local Copywriting Engine
   const ctaLine =
     callToAction ||
     'Cuéntanos tu opinión en los comentarios y guarda este post para consultarlo después 👇';
 
-  const slugTag = cleanTopic
+  const slugWords = cleanTopic
     .toLowerCase()
-    .replace(/[^a-z0-9áéíóúñ\s]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 3)
+    .filter((w) => w.length >= 4)
     .slice(0, 4)
-    .map((w) => `#${w.normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`)
-    .join(' ');
+    .map((w) => `#${w}`);
 
-  const defaultHashtags = `${slugTag || '#contenido'} #estrategiadigital #creadoresdecontenido #marketingdigital #emprendedores #marcapersonal #instagramgrowth #negociosonline #tendencias2026`;
+  const tagPool = [
+    '#estrategiadigital', '#creadoresdecontenido', '#marketingdigital',
+    '#emprendedores', '#marcapersonal', '#instagramgrowth', '#redessociales', '#contenidoquevende'
+  ];
+  const rotatedTags = [0, 1, 2, 3, 4].map((i) => tagPool[(seedNum + i) % tagPool.length]);
+  const defaultHashtags = [...new Set([...slugWords, ...rotatedTags, '#sheep100'])].join(' ');
 
-  const options = [
+  const bank = [
     {
-      title: `Opción 1: Gancho Directo + Valor (${selectedTone})`,
-      caption: `¿Sabías que la clave en ${cleanTopic} está en los pequeños detalles que casi nadie aplica? 🚀✨\n\nHoy te compartimos los 3 pilares que están marcando la diferencia:\n\n1️⃣ Claridad desde el primer segundo para captar la atención.\n2️⃣ Consistencia visual que transmite confianza inmediata.\n3️⃣ Un sistema paso a paso que trabaja por ti.\n\n💡 ${ctaLine}\n\n${defaultHashtags}`,
-      firstComment: `🔥 Si quieres que profundicemos más sobre "${cleanTopic}", deja un "QUIERO" aquí abajo y te respondemos.`
+      title: `Gancho Directo + Valor (${selectedTone})`,
+      caption: `¿Sabías que la clave en ${cleanTopic} está en los pequeños detalles que casi nadie aplica? 🚀✨\n\nHoy te compartimos 3 pilares que marcan la diferencia:\n1️⃣ Claridad en el primer segundo\n2️⃣ Consistencia visual\n3️⃣ Cierre con llamado claro\n\n💡 ${ctaLine}\n\n${defaultHashtags}`,
+      firstComment: `🔥 Si quieres que profundicemos sobre "${cleanTopic}", comenta "QUIERO" aquí abajo.`
     },
     {
-      title: `Opción 2: Storytelling & Conexión Humana`,
-      caption: `Hace un tiempo pensábamos que dominar ${cleanTopic} requería complicarse durante horas... hasta que cambiamos el enfoque por completo ☕🙌\n\nCuando simplificas tu proceso y te enfocas en aportar valor real a tu comunidad, los resultados llegan solos.\n\n✨ Menos fricción.\n✨ Más autenticidad.\n✨ Mejor conexión con tu audiencia ideal.\n\n${ctaLine}\n\n${defaultHashtags}`,
-      firstComment: `¿Cuál ha sido tu mayor reto con ${cleanTopic} este mes? ¡Te leemos! 👇`
+      title: `Storytelling & Conexión Humana`,
+      caption: `Hace un tiempo pensábamos que dominar ${cleanTopic} requería complicarse durante horas... hasta que cambiamos el enfoque 🙌\n\n✨ Menos fricción.\n✨ Más autenticidad.\n✨ Mejor conexión con tu audiencia ideal.\n\n${ctaLine}\n\n${defaultHashtags}`,
+      firstComment: `¿Cuál ha sido tu mayor reto con ${cleanTopic}? ¡Te leemos! 👇`
     },
     {
-      title: `Opción 3: Formato Corto / Ideal para Reels & TikTok`,
-      caption: `Guarda esto antes de seguir haciendo scroll 📌🔥\n\nAsí es como transformamos ${cleanTopic} en resultados reales sin perder horas en el intento:\n\n✅ Paso 1: Define tu objetivo del día\n✅ Paso 2: Prepara tu contenido visual en bloque\n✅ Paso 3: Automatiza y mide qué conecta mejor\n\n👉 ${ctaLine}\n\n${defaultHashtags}`,
-      firstComment: `Comparte este post con alguien que necesite ver esto hoy 🚀`
+      title: `Guion / Checklist Rápido`,
+      caption: `Guarda esto antes de seguir deslizando 📌🔥\n\nAsí aplicamos ${cleanTopic} paso a paso:\n✅ Paso 1: Define objetivo\n✅ Paso 2: Prepara la pieza visual\n✅ Paso 3: Mide qué conecta mejor\n\n👉 ${ctaLine}\n\n${defaultHashtags}`,
+      firstComment: `Comparte este post con alguien que necesite verlo hoy 🚀`
+    },
+    {
+      title: `Problema → Solución Inmediata`,
+      caption: `Si sientes que trabajas en ${cleanTopic} pero falta respuesta, prueba este ajuste directo 👀✅:\n\nCambia el arranque por un beneficio visible y deja una sola acción al final.\n\n👉 ${ctaLine}\n\n${defaultHashtags}`,
+      firstComment: `¿Ya lo aplicaste en tu cuenta? Cuéntanos abajo 💬`
+    },
+    {
+      title: `Mito vs. Realidad (${selectedPlatform})`,
+      caption: `Error común en ${cleanTopic}: creer que más texto siempre vende más 🤯\n\nLa realidad: el ritmo y un buen gancho inicial multiplican las guardadas.\n\n💡 ${ctaLine}\n\n${defaultHashtags}`,
+      firstComment: `Guarda esto para tu próxima publicación 📌`
     }
   ];
+
+  const prevSet = new Set(Array.isArray(previousTitles) ? previousTitles : []);
+  const fresh = bank.filter((b) => !prevSet.has(b.title));
+  const pool = fresh.length >= 3 ? fresh : bank;
+  const options = [0, 1, 2].map((i) => {
+    const pick = pool[(seedNum + i) % pool.length];
+    return {
+      title: `Opción ${i + 1}: ${pick.title}`,
+      caption: pick.caption,
+      firstComment: pick.firstComment
+    };
+  });
 
   res.json({
     source: 'smart-engine',
