@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sheep-100-v3';
+const CACHE_NAME = 'sheep-100-v4';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {

@@ -227,6 +227,26 @@ const TAB_TITLES = {
   'tiktok-wizard': '🎵 Configuración Paso a Paso con TikTok (Sandbox & Subida desde Drive)'
 };
 
+const MOBILE_TAB_TITLES = {
+  calendar: '📅 Calendario',
+  grid: '📱 Feed & Stories',
+  metrics: '📊 Métricas',
+  media: '🖼️ Medios',
+  ai: '✨ Estudio IA',
+  'meta-wizard': '🧭 Meta API',
+  'tiktok-wizard': '🎵 TikTok API'
+};
+
+let activeTabId = 'calendar';
+
+function updateCurrentViewTitle(tabId = activeTabId) {
+  const titleEl = document.getElementById('currentViewTitle');
+  if (!titleEl) return;
+  const isCompact = window.innerWidth <= 960 || document.body.classList.contains('mobile-app-mode');
+  const map = isCompact ? MOBILE_TAB_TITLES : TAB_TITLES;
+  if (map[tabId]) titleEl.textContent = map[tabId];
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   loadLocalCache();
   ensureSampleStoryExists();
@@ -726,6 +746,8 @@ function onUserAuthenticated(userObj) {
   localStorage.setItem(LS_SESSION_KEY, JSON.stringify(userObj));
   const pill = document.getElementById('userBadgePill');
   if (pill) pill.textContent = `👤 ${userObj.name || userObj.username}`;
+  const drawerUser = document.getElementById('sidebarUserChip');
+  if (drawerUser) drawerUser.textContent = `👤 ${userObj.name || userObj.username}`;
   hideLoginScreen();
   renderAll();
 }
@@ -847,8 +869,8 @@ function renderUsersList() {
   container.innerHTML = authorizedUsers
     .map(
       (u) => `
-      <div class="hashtag-group-item" style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
+      <div class="hashtag-group-item" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1;overflow-wrap:anywhere;">
           <strong>👤 ${escapeHtml(u.name || u.username)}</strong>
           <div style="font-size:0.75rem;color:var(--text-muted);">Usuario: <code>${escapeHtml(u.username)}</code></div>
         </div>
@@ -895,9 +917,36 @@ function renderAll() {
 // ==========================================
 // NAVIGATION & MOBILE APP PREVIEW MODE
 // ==========================================
+function closeMobileDrawer() {
+  document.body.classList.remove('mobile-drawer-open');
+}
+
 function initNavigation() {
   document.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  document.getElementById('btnMobileMenu')?.addEventListener('click', () => {
+    document.body.classList.toggle('mobile-drawer-open');
+  });
+  document.getElementById('btnCloseSidebar')?.addEventListener('click', closeMobileDrawer);
+  document.getElementById('sidebarBackdrop')?.addEventListener('click', closeMobileDrawer);
+
+  document.getElementById('btnDrawerUsers')?.addEventListener('click', () => {
+    closeMobileDrawer();
+    document.getElementById('btnManageUsers')?.click();
+  });
+  document.getElementById('btnDrawerNotifications')?.addEventListener('click', () => {
+    closeMobileDrawer();
+    document.getElementById('btnEnableNotifications')?.click();
+  });
+  document.getElementById('btnDrawerInstallPwa')?.addEventListener('click', () => {
+    closeMobileDrawer();
+    document.getElementById('btnInstallPwa')?.click();
+  });
+  document.getElementById('btnDrawerLogout')?.addEventListener('click', () => {
+    closeMobileDrawer();
+    document.getElementById('btnLogout')?.click();
   });
 
   document.getElementById('btnPrevWeek').addEventListener('click', () => {
@@ -927,21 +976,29 @@ function initNavigation() {
     document.body.classList.toggle('mobile-app-mode');
     const isMobile = document.body.classList.contains('mobile-app-mode');
     btnMobile.classList.toggle('active-mode', isMobile);
-    btnMobile.textContent = isMobile ? '🖥️ Vista Web' : '📱 Vista App';
+    btnMobile.textContent = isMobile ? '🖥️ Web' : '📱 Vista App';
+    if (!isMobile) closeMobileDrawer();
+    updateCurrentViewTitle();
     showToast(isMobile ? '📱 Modo App Móvil activado.' : '🖥️ Vista Web restaurada.');
   });
+
+  window.addEventListener('resize', () => updateCurrentViewTitle());
+  updateCurrentViewTitle();
 }
 
 function switchTab(tabId) {
+  activeTabId = tabId;
   document.querySelectorAll('.tab-panel').forEach((panel) => {
     panel.classList.toggle('active', panel.id === `tab-${tabId}`);
   });
   document.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
   });
-  const titleEl = document.getElementById('currentViewTitle');
-  if (titleEl && TAB_TITLES[tabId]) {
-    titleEl.textContent = TAB_TITLES[tabId];
+  updateCurrentViewTitle(tabId);
+  closeMobileDrawer();
+  const contentArea = document.getElementById('contentArea');
+  if (contentArea && (window.innerWidth <= 960 || document.body.classList.contains('mobile-app-mode'))) {
+    contentArea.scrollTop = 0;
   }
 }
 
@@ -980,7 +1037,7 @@ function renderCalendarMediaDrawer() {
     .map(
       (m) => `
       <div class="drawer-media-item" draggable="true" data-drag-type="media" data-media-id="${m.id}" title="Arrastra al calendario para crear Post o Historia: ${escapeHtml(m.title)}">
-        <img src="${m.url}" alt="${escapeHtml(m.title)}" />
+        <img src="${m.url}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./icon.svg'" />
         <div class="media-tag-overlay">${m.format} • ${escapeHtml(m.title)}</div>
       </div>
     `
@@ -1201,7 +1258,7 @@ function renderPostsQueue() {
         <div class="queue-row" style="${storyFlag ? 'border-left: 4px solid #ec4899;' : ''}">
           <div class="queue-row-left">
             <img src="${escapeHtml(thumbUrl)}" class="queue-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
-            <div>
+            <div class="queue-row-info">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 ${getPostFormatBadge(p)}
                 <strong>${escapeHtml(p.title)}</strong>
@@ -1210,7 +1267,7 @@ function renderPostsQueue() {
               <div style="font-size:0.78rem;color:var(--text-muted);">
                 🗓️ ${dateFormatted} • Redes: ${(p.platforms || []).join(', ').toUpperCase()}
               </div>
-              ${lastLog ? `<div style="font-size:0.73rem;color:#a5b4fc;margin-top:3px;">ℹ️ ${escapeHtml(lastLog)}</div>` : ''}
+              ${lastLog ? `<div style="font-size:0.73rem;color:#a5b4fc;margin-top:3px;overflow-wrap:anywhere;">ℹ️ ${escapeHtml(lastLog)}</div>` : ''}
             </div>
           </div>
 
@@ -1902,7 +1959,7 @@ function renderInstagramGrid() {
           (st) => `
         <div class="ig-story-bubble" data-story-id="${st.id}">
           <div class="ig-story-ring">
-            <img src="${st.mediaUrl || './icon.svg'}" alt="${escapeHtml(st.title)}" />
+            <img src="${st.mediaUrl || './icon.svg'}" referrerpolicy="no-referrer" alt="${escapeHtml(st.title)}" onerror="this.src='./icon.svg'" />
           </div>
           <small>${escapeHtml(st.title)}</small>
         </div>
@@ -1917,15 +1974,15 @@ function renderInstagramGrid() {
         const detailBox = document.getElementById('selectedGridPostDetail');
         detailBox.innerHTML = `
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-            <img src="${st.mediaUrl || './icon.svg'}" style="width:110px;height:190px;object-fit:cover;border-radius:12px;border:2px solid #ec4899;" />
-            <div style="flex:1;min-width:180px;display:flex;flex-direction:column;gap:8px;">
+            <img src="${st.mediaUrl || './icon.svg'}" style="width:110px;height:190px;object-fit:cover;border-radius:12px;border:2px solid #ec4899;flex-shrink:0;" />
+            <div style="flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:8px;">
               <div>${getPostFormatBadge(st)}</div>
               <strong>${escapeHtml(st.title)}</strong>
-              <p style="font-size:0.8rem;color:#cbd5e1;white-space:pre-wrap;">${escapeHtml(st.caption)}</p>
+              <p style="font-size:0.8rem;color:#cbd5e1;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(st.caption)}</p>
               <div style="font-size:0.75rem;color:var(--text-muted);">
                 ⏰ Programada: ${new Date(st.scheduledAt).toLocaleString('es-ES')}
               </div>
-              <div style="display:flex;gap:8px;margin-top:4px;">
+              <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
                 <button class="btn-primary btn-sm" onclick="publishPostNow('${st.id}')">⭕ Publicar Historia Ahora</button>
                 <button class="btn-outline btn-sm" onclick="editPostById('${st.id}')">✏️ Editar</button>
               </div>
@@ -1946,7 +2003,7 @@ function renderInstagramGrid() {
     .map(
       (p) => `
       <div class="ig-cell" draggable="true" data-post-id="${p.id}">
-        <img src="${p.mediaUrl || './icon.svg'}" alt="${escapeHtml(p.title)}" />
+        <img src="${p.mediaUrl || './icon.svg'}" referrerpolicy="no-referrer" alt="${escapeHtml(p.title)}" onerror="this.src='./icon.svg'" />
         <span class="ig-cell-badge">${p.status === 'published' ? '✔' : '⏰'}</span>
       </div>
     `
@@ -1985,10 +2042,10 @@ function renderInstagramGrid() {
       if (!post) return;
       const detailBox = document.getElementById('selectedGridPostDetail');
       detailBox.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:0;overflow-wrap:anywhere;">
           <div>${getPostFormatBadge(post)} <strong>${escapeHtml(post.title)}</strong></div>
-          <p style="font-size:0.8rem;color:#cbd5e1;white-space:pre-wrap;">${escapeHtml(post.caption)}</p>
-          <div style="display:flex;gap:8px;margin-top:6px;">
+          <p style="font-size:0.8rem;color:#cbd5e1;white-space:pre-wrap;overflow-wrap:anywhere;">${escapeHtml(post.caption)}</p>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
             <button class="btn-primary btn-sm" onclick="publishPostNow('${post.id}')">🚀 Publicar Ahora</button>
             <button class="btn-secondary btn-sm" onclick="quickCopyAndDownload('${post.id}')">📋 Copiar Copy + Foto</button>
           </div>
@@ -2250,22 +2307,22 @@ function renderMetricsDashboard() {
       const itemEr = m.reach > 0 ? ((interactions / m.reach) * 100).toFixed(1) : '5.8';
       return `
         <tr>
-          <td>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <img src="${p.mediaUrl || './icon.svg'}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;" />
-              <div>
+          <td data-label="Publicación">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              <img src="${p.mediaUrl || './icon.svg'}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;" />
+              <div style="min-width:0;flex:1;overflow-wrap:anywhere;">
                 <strong>${escapeHtml(p.title)}</strong>
                 <div style="font-size:0.72rem;color:var(--text-muted);">${new Date(p.scheduledAt || p.createdAt).toLocaleDateString('es-ES')}</div>
               </div>
             </div>
           </td>
-          <td>${getPostFormatBadge(p)}</td>
-          <td><span class="status-badge ${p.status}">${p.status === 'published' ? 'Publicado' : 'Programado'}</span></td>
-          <td><strong>${(m.reach || 0).toLocaleString('es-ES')}</strong></td>
-          <td>❤️ ${(m.likes || 0).toLocaleString('es-ES')}</td>
-          <td>💬 ${(m.comments || 0).toLocaleString('es-ES')}</td>
-          <td>🔖 ${(m.saves || 0).toLocaleString('es-ES')}</td>
-          <td><span class="kpi-trend up">${itemEr}%</span></td>
+          <td data-label="Formato">${getPostFormatBadge(p)}</td>
+          <td data-label="Estado"><span class="status-badge ${p.status}">${p.status === 'published' ? 'Publicado' : 'Programado'}</span></td>
+          <td data-label="👁️ Alcance"><strong>${(m.reach || 0).toLocaleString('es-ES')}</strong></td>
+          <td data-label="❤️ Likes">❤️ ${(m.likes || 0).toLocaleString('es-ES')}</td>
+          <td data-label="💬 Comentarios">💬 ${(m.comments || 0).toLocaleString('es-ES')}</td>
+          <td data-label="🔖 Guardados">🔖 ${(m.saves || 0).toLocaleString('es-ES')}</td>
+          <td data-label="🔥 Engagement"><span class="kpi-trend up">${itemEr}%</span></td>
         </tr>
       `;
     })
@@ -2423,7 +2480,7 @@ function renderMediaGallery() {
           <div style="font-size:0.72rem;color:var(--text-muted);">
             Formato: <b>${m.format}</b> • ${norm.isDrive ? '📁 Google Drive Directo' : m.publicUrl ? '🌐 URL Pública' : '☁️ En Nube'}
           </div>
-          <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
+          <div class="media-card-actions" style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;">
             <button class="btn-primary btn-sm" style="flex:1;" onclick="openComposerModal({ mediaId: '${m.id}', defaultFormat: 'POST' })" title="Publicar solo en el Feed">
               📸 Post
             </button>
@@ -2548,11 +2605,11 @@ function renderHashtagGroups() {
     .map(
       (g) => `
       <div class="hashtag-group-item">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
           <strong>${escapeHtml(g.name)}</strong>
           <button class="btn-outline btn-sm" onclick="copyText('${escapeHtml(g.tags)}')">Copiar #</button>
         </div>
-        <div style="color:var(--text-muted);font-size:0.75rem;">${escapeHtml(g.tags)}</div>
+        <div style="color:var(--text-muted);font-size:0.75rem;overflow-wrap:anywhere;">${escapeHtml(g.tags)}</div>
       </div>
     `
     )
@@ -3593,6 +3650,7 @@ function updateComposerPreview(url) {
 }
 
 function openComposerModal(opts = {}) {
+  closeMobileDrawer();
   const modal = document.getElementById('composerModal');
   const form = document.getElementById('formPostComposer');
   form.reset();
@@ -3674,10 +3732,12 @@ function initPwaAndNotifications() {
   }
 
   const btnInstall = document.getElementById('btnInstallPwa');
+  const btnInstallDrawer = document.getElementById('btnDrawerInstallPwa');
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
     btnInstall.classList.remove('hidden');
+    btnInstallDrawer?.classList.remove('hidden');
   });
 
   btnInstall.addEventListener('click', async () => {
@@ -3686,6 +3746,7 @@ function initPwaAndNotifications() {
     await deferredInstallPrompt.userChoice;
     deferredInstallPrompt = null;
     btnInstall.classList.add('hidden');
+    btnInstallDrawer?.classList.add('hidden');
   });
 
   document.getElementById('btnEnableNotifications').addEventListener('click', async () => {

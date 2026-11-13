@@ -2,8 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#6366f1" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>SHEEP 100 — Planificador de Posts, Historias & Métricas</title>
@@ -80,14 +81,18 @@
        APLICACIÓN PRINCIPAL — SHEEP 100
        ========================================================= -->
   <div id="app-shell" class="app-shell">
-    <!-- SIDEBAR (Desktop) -->
-    <aside class="sidebar">
+    <!-- Backdrop para Drawer Móvil -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- SIDEBAR (Desktop & Mobile App Drawer) -->
+    <aside class="sidebar" id="appSidebar">
       <div class="brand">
         <img src="./icon.svg" alt="SHEEP 100 Logo" class="brand-icon" />
-        <div>
+        <div style="flex:1;min-width:0;">
           <h1 class="brand-title">SHEEP 100</h1>
           <span class="brand-subtitle">Posts • Historias • Métricas</span>
         </div>
+        <button type="button" class="btn-close sidebar-close-btn" id="btnCloseSidebar" aria-label="Cerrar menú">✕</button>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;">
@@ -173,6 +178,17 @@
           </button>
         </div>
       </div>
+
+      <!-- Acciones de Cuenta y App (visibles en Drawer Móvil) -->
+      <div class="sidebar-mobile-account">
+        <div class="sidebar-user-chip" id="sidebarUserChip">👤 admin</div>
+        <div class="sidebar-mobile-btns">
+          <button type="button" class="btn-outline btn-sm" id="btnDrawerUsers">👥 Usuarios</button>
+          <button type="button" class="btn-outline btn-sm" id="btnDrawerNotifications">🔔 Alertas</button>
+          <button type="button" class="btn-install btn-sm hidden" id="btnDrawerInstallPwa">📲 Instalar</button>
+          <button type="button" class="btn-outline btn-sm btn-logout" id="btnDrawerLogout">🚪 Salir</button>
+        </div>
+      </div>
     </aside>
 
     <!-- MAIN CONTENT AREA -->
@@ -180,6 +196,7 @@
       <!-- TOP HEADER -->
       <header class="topbar">
         <div class="topbar-left">
+          <button type="button" class="btn-icon mobile-menu-btn" id="btnMobileMenu" aria-label="Abrir menú">☰</button>
           <h2 id="currentViewTitle">📅 Calendario Visual Drag & Drop</h2>
           <span class="scheduler-pill" id="cloudStatusPill" title="Sincronizado en tiempo real con Firebase Firestore (sheep-100-b8a90)">
             <span class="pulse-dot"></span> <span id="cloudStatusText">Conectando Nube...</span>
@@ -917,9 +934,9 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
                     <div id="tiktokVerifyFeedback" class="verify-feedback hidden"></div>
 
                     <label>Si autorizaste en otra pestaña y la URL tiene <code>?code=...</code>, pégala aquí (Opcional — Canje Automático)</label>
-                    <div style="display:flex;gap:8px;">
+                    <div class="tiktok-code-exchange-row">
                       <input type="text" id="cfgTikTokManualCodeUrl" placeholder="Pega aquí la URL completa con ?code=... o el código si se abrió en otra ventana" />
-                      <button type="button" class="btn-outline btn-sm" id="btnTikTokExchangeCodeNow" style="white-space:nowrap;">
+                      <button type="button" class="btn-outline btn-sm" id="btnTikTokExchangeCodeNow">
                         ⚡ Canjear Código
                       </button>
                     </div>
