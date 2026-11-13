@@ -4618,6 +4618,165 @@ function setComposerFormatUI(formatValue) {
   }
 }
 
+const EMOJI_RECENT_KEY = 'SHEEP100_RECENT_EMOJIS';
+const DEFAULT_QUICK_EMOJIS = ['🔥', '✨', '🚀', '❤️', '😍', '👉', '👇', '✅', '📸', '🎥', '💥', '🐑'];
+const EMOJI_CATEGORIES = [
+  {
+    id: 'recent',
+    label: '🕒 Top',
+    emojis: DEFAULT_QUICK_EMOJIS
+  },
+  {
+    id: 'faces',
+    label: '😀 Caras',
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+      '😊', '🥰', '😍', '🤩', '😘', '😋', '😎', '🤓',
+      '🥳', '🤯', '😱', '🥺', '😭', '🤔', '🫡', '🫶',
+      '🙌', '👏', '👍', '💪', '🙏', '🤝', '✌️', '👌'
+    ]
+  },
+  {
+    id: 'promo',
+    label: '🔥 Marketing',
+    emojis: [
+      '🔥', '✨', '⚡', '💥', '🚀', '🎯', '📌', '📍',
+      '👉', '👇', '👆', '🔗', '🛒', '🛍️', '🎁', '🏷️',
+      '💸', '💰', '💎', '⭐', '🌟', '💯', '✅', '🆕',
+      '⏰', '⏳', '📢', '📣', '🏆', '🎉', '🎊', '🔔'
+    ]
+  },
+  {
+    id: 'social',
+    label: '📸 Redes',
+    emojis: [
+      '📸', '🎥', '🎬', '🎞️', '🎠', '⭕', '🎵', '🎶',
+      '🎙️', '📱', '💻', '✍️', '📝', '💡', '📊', '📈',
+      '💬', '🔖', '🔄', '👀', '❤️', '🧡', '💛', '💚',
+      '💙', '💜', '🖤', '🤍', '🩷', '👑', '📲', '🔴'
+    ]
+  },
+  {
+    id: 'lifestyle',
+    label: '☕ Estilo',
+    emojis: [
+      '🐑', '☕', '🥐', '🍔', '🍕', '🍰', '🥂', '🎨',
+      '📦', '🚚', '🏪', '🏠', '🗓️', '✈️', '🏖️', '🌿',
+      '🌸', '🌻', '☀️', '🌙', '🌈', '🌊', '🦋', '🧘'
+    ]
+  }
+];
+let activeEmojiCategoryId = 'recent';
+
+function getRecentEmojisList() {
+  try {
+    const raw = localStorage.getItem(EMOJI_RECENT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (_) {}
+  return [...DEFAULT_QUICK_EMOJIS];
+}
+
+function recordRecentEmoji(emoji) {
+  const current = getRecentEmojisList().filter((e) => e !== emoji);
+  const next = [emoji, ...current].slice(0, 18);
+  try {
+    localStorage.setItem(EMOJI_RECENT_KEY, JSON.stringify(next));
+  } catch (_) {}
+}
+
+function insertEmojiIntoCaption(emoji) {
+  const area = document.getElementById('postCaption');
+  if (!area || !emoji) return;
+
+  const val = area.value || '';
+  const start = typeof area.selectionStart === 'number' ? area.selectionStart : val.length;
+  const end = typeof area.selectionEnd === 'number' ? area.selectionEnd : val.length;
+
+  area.value = val.slice(0, start) + emoji + val.slice(end);
+  const nextPos = start + emoji.length;
+  try {
+    area.focus();
+    area.setSelectionRange(nextPos, nextPos);
+  } catch (_) {}
+
+  area.dispatchEvent(new Event('input'));
+  recordRecentEmoji(emoji);
+  renderComposerEmojiUI();
+}
+
+function toggleComposerEmojiPanel(forceOpen = null) {
+  const panel = document.getElementById('composerEmojiPanel');
+  const toggleBtn = document.getElementById('btnToggleEmojiPicker');
+  if (!panel) return;
+  const shouldOpen = forceOpen !== null ? Boolean(forceOpen) : panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !shouldOpen);
+  toggleBtn?.classList.toggle('active', shouldOpen);
+  toggleBtn?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    setTimeout(() => panel.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }), 50);
+  }
+}
+
+function renderComposerEmojiUI() {
+  const quickStrip = document.getElementById('quickEmojiStrip');
+  const tabsEl = document.getElementById('emojiCategoryTabs');
+  const gridEl = document.getElementById('emojiPickerGrid');
+  const recents = getRecentEmojisList();
+
+  if (quickStrip) {
+    const stripItems = recents.slice(0, 8);
+    quickStrip.innerHTML =
+      stripItems
+        .map(
+          (em) =>
+            `<button type="button" class="emoji-quick-btn" data-emoji="${em}" title="Insertar ${em}">${em}</button>`
+        )
+        .join('') +
+      `<button type="button" class="emoji-quick-more" id="btnQuickMoreEmojis">➕ Más</button>`;
+
+    quickStrip.querySelectorAll('.emoji-quick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => insertEmojiIntoCaption(btn.dataset.emoji));
+    });
+    document.getElementById('btnQuickMoreEmojis')?.addEventListener('click', () => {
+      toggleComposerEmojiPanel();
+    });
+  }
+
+  if (tabsEl) {
+    tabsEl.innerHTML = EMOJI_CATEGORIES.map(
+      (cat) =>
+        `<button type="button" class="emoji-tab-btn ${
+          cat.id === activeEmojiCategoryId ? 'active' : ''
+        }" data-ecat="${cat.id}">${cat.label}</button>`
+    ).join('');
+
+    tabsEl.querySelectorAll('.emoji-tab-btn').forEach((tabBtn) => {
+      tabBtn.addEventListener('click', () => {
+        activeEmojiCategoryId = tabBtn.dataset.ecat;
+        renderComposerEmojiUI();
+      });
+    });
+  }
+
+  if (gridEl) {
+    const cat = EMOJI_CATEGORIES.find((c) => c.id === activeEmojiCategoryId) || EMOJI_CATEGORIES[0];
+    const items = cat.id === 'recent' ? recents : cat.emojis;
+    gridEl.innerHTML = items
+      .map(
+        (em) =>
+          `<button type="button" class="emoji-item-btn" data-emoji="${em}" title="Insertar ${em}">${em}</button>`
+      )
+      .join('');
+
+    gridEl.querySelectorAll('.emoji-item-btn').forEach((btn) => {
+      btn.addEventListener('click', () => insertEmojiIntoCaption(btn.dataset.emoji));
+    });
+  }
+}
+
 function initComposerEvents() {
   document.getElementById('btnOpenComposer')?.addEventListener('click', () =>
     openComposerModal({ defaultFormat: 'POST' })
@@ -4627,6 +4786,13 @@ function initComposerEvents() {
   );
   document.getElementById('btnCloseComposer').addEventListener('click', closeComposerModal);
   document.getElementById('btnCancelComposer').addEventListener('click', closeComposerModal);
+  document.getElementById('btnToggleEmojiPicker')?.addEventListener('click', () => {
+    toggleComposerEmojiPanel();
+  });
+  document.getElementById('btnCloseEmojiPicker')?.addEventListener('click', () => {
+    toggleComposerEmojiPanel(false);
+  });
+  renderComposerEmojiUI();
 
   document.querySelectorAll('.format-choice').forEach((card) => {
     card.addEventListener('click', () => {
@@ -4945,6 +5111,8 @@ function openComposerModal(opts = {}) {
       document.getElementById('postFirstComment').value = opts.prefillFirstComment;
   }
 
+  toggleComposerEmojiPanel(false);
+  renderComposerEmojiUI();
   document.getElementById('postCaption').dispatchEvent(new Event('input'));
   modal.classList.remove('hidden');
 }

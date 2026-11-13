@@ -1151,9 +1151,23 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
 
             <div class="caption-label-row">
               <label id="captionFieldLabel">Copy / Descripción (o Notas para tu Historia)</label>
-              <span class="char-counter" id="captionCharCounter">0 / 2200</span>
+              <div class="caption-tools-right">
+                <button type="button" class="btn-emoji-toggle" id="btnToggleEmojiPicker" aria-expanded="false" title="Abrir panel completo de emojis">
+                  😊 Emojis
+                </button>
+                <span class="char-counter" id="captionCharCounter">0 / 2200</span>
+              </div>
             </div>
             <textarea id="postCaption" rows="4" placeholder="Escribe tu copy aquí o notas de texto para acompañar tu Historia..." required></textarea>
+
+            <div class="quick-emoji-bar" id="quickEmojiStrip" aria-label="Emojis rápidos"></div>
+            <div class="emoji-picker-panel hidden" id="composerEmojiPanel" aria-label="Selector de emojis">
+              <div class="emoji-picker-head">
+                <div class="emoji-picker-tabs" id="emojiCategoryTabs"></div>
+                <button type="button" class="btn-emoji-close" id="btnCloseEmojiPicker" title="Cerrar selector">✕</button>
+              </div>
+              <div class="emoji-picker-grid" id="emojiPickerGrid"></div>
+            </div>
 
             <div class="quick-hashtag-bar" id="composerHashtagPills"></div>
 

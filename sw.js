@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sheep-100-v7';
+const CACHE_NAME = 'sheep-100-v8';
 const ASSETS = [
   './',
   './index.html',
