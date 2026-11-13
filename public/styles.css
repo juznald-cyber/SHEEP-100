@@ -1194,6 +1194,10 @@ label {
   margin-bottom: 10px;
 }
 
+.hashtag-manager {
+  margin-top: 16px;
+}
+
 .hashtag-groups-list {
   display: flex;
   flex-direction: column;
@@ -1579,20 +1583,26 @@ label {
   flex-shrink: 0;
   width: 100%;
   height: auto;
-  min-height: 60px;
-  padding: 6px 4px max(6px, env(safe-area-inset-bottom));
+  min-height: 58px;
+  padding: 5px 4px max(6px, env(safe-area-inset-bottom));
   background: rgba(17, 24, 39, 0.98);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
   justify-content: space-around;
   align-items: center;
   gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
   z-index: 900;
 }
 
+.bottom-nav::-webkit-scrollbar {
+  display: none;
+}
+
 .bottom-nav-item {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
+  min-width: 46px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -1603,13 +1613,13 @@ label {
   gap: 2px;
   padding: 5px 2px;
   border-radius: 10px;
-  font-size: 1.08rem;
+  font-size: 1.04rem;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .bottom-nav-item small {
-  font-size: 0.63rem;
+  font-size: 0.6rem;
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
