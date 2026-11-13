@@ -3391,21 +3391,21 @@ function renderAiGeminiStatus() {
   const pillBtn = document.getElementById('btnToggleAiKeyBox');
   const quickInput = document.getElementById('aiQuickGeminiKey');
 
-  const isValidGeminiKey = key.startsWith('AIzaSy');
-  const isInvalidFormat = Boolean(key && !isValidGeminiKey);
+  const isMetaSecret = Boolean(key && (/^[a-f0-9]{32}$/i.test(key)));
+  const isValidGeminiKey = Boolean(key && !isMetaSecret && (key.startsWith('AIzaSy') || key.startsWith('AQ.') || key.length >= 25));
 
   if (statusEl) {
     if (isValidGeminiKey) {
       statusEl.textContent = '🟢 Gemini Flash Activo';
-    } else if (isInvalidFormat) {
-      statusEl.textContent = '⚠️ Clave Incorrecta (No es Gemini)';
+    } else if (isMetaSecret) {
+      statusEl.textContent = '⚠️ Clave de Meta (No es Gemini)';
     } else {
       statusEl.textContent = '⚡ Motor Local · Conectar Gemini';
     }
   }
   if (pillBtn) {
     pillBtn.classList.toggle('connected', isValidGeminiKey);
-    pillBtn.classList.toggle('warn', isInvalidFormat);
+    pillBtn.classList.toggle('warn', isMetaSecret);
   }
   if (quickInput && document.activeElement !== quickInput) {
     quickInput.value = key;
@@ -3599,10 +3599,11 @@ async function callGeminiDirectForCopies({ apiKey, topic, platform, tone, cta, e
     throw new Error('Falta la API Key de Gemini. Pulsa "🔑 Conectar Gemini" para ingresarla.');
   }
 
-  // Pre-validate key format: Google AI Studio API Keys always start with AIzaSy
-  if (!cleanKey.startsWith('AIzaSy')) {
+  // Pre-validate key format: Avoid Meta 32-hex secrets
+  const isMetaSecret = cleanKey === '08c18fb125cc55c77b534fe7f33ea7de' || (/^[a-f0-9]{32}$/i.test(cleanKey));
+  if (isMetaSecret) {
     throw new Error(
-      `La clave ingresada ("${cleanKey.slice(0, 8)}...") parece un App Secret de Meta. Las claves de Google Gemini empiezan con "AIzaSy..." y se obtienen gratis en Google AI Studio (aistudio.google.com/app/apikey).`
+      'La clave ingresada parece un App Secret de Meta. Ingresa tu API Key de Gemini generada en Google AI Studio (aistudio.google.com/app/apikey).'
     );
   }
 
@@ -3646,7 +3647,10 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
         )}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': cleanKey
+          },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -3661,8 +3665,12 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
       const data = await res.json();
       if (!res.ok || data.error) {
         const msg = data?.error?.message || `Error Gemini HTTP ${res.status}`;
+        const reason = data?.error?.details?.[0]?.reason || '';
+        if (reason === 'ACCESS_TOKEN_TYPE_UNSUPPORTED' || msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED')) {
+          throw new Error('La clave tiene restricción "Gemini API" en Google Cloud. En Google Cloud Console (APIs y Servicios -> Credenciales), edita tu clave y en "Restricciones de API" cámbiala a "Generative Language API" o "No restringir clave".');
+        }
         if (msg.includes('API key not valid')) {
-          throw new Error('API key no válida. Las claves de Gemini empiezan con "AIzaSy..." y se obtienen gratis en Google AI Studio (aistudio.google.com/app/apikey).');
+          throw new Error('API key de Gemini no válida o rechazada por Google. Verifica haber seleccionado "Generative Language API" en las restricciones de la clave.');
         }
         lastErr = new Error(msg);
         continue;
@@ -3671,7 +3679,7 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
       if (rawText) break;
     } catch (e) {
       lastErr = e;
-      if (e.message && (e.message.includes('API key no válida') || e.message.includes('AIzaSy'))) {
+      if (e.message && (e.message.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || e.message.includes('API key de Gemini no válida') || e.message.includes('Google Cloud Console'))) {
         throw e;
       }
     }
