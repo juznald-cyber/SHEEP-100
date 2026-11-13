@@ -3391,11 +3391,21 @@ function renderAiGeminiStatus() {
   const pillBtn = document.getElementById('btnToggleAiKeyBox');
   const quickInput = document.getElementById('aiQuickGeminiKey');
 
+  const isValidGeminiKey = key.startsWith('AIzaSy');
+  const isInvalidFormat = Boolean(key && !isValidGeminiKey);
+
   if (statusEl) {
-    statusEl.textContent = key ? '🟢 Gemini 2.5 Flash Activo' : '⚡ Motor Local · Conectar Gemini';
+    if (isValidGeminiKey) {
+      statusEl.textContent = '🟢 Gemini Flash Activo';
+    } else if (isInvalidFormat) {
+      statusEl.textContent = '⚠️ Clave Incorrecta (No es Gemini)';
+    } else {
+      statusEl.textContent = '⚡ Motor Local · Conectar Gemini';
+    }
   }
   if (pillBtn) {
-    pillBtn.classList.toggle('connected', Boolean(key));
+    pillBtn.classList.toggle('connected', isValidGeminiKey);
+    pillBtn.classList.toggle('warn', isInvalidFormat);
   }
   if (quickInput && document.activeElement !== quickInput) {
     quickInput.value = key;
@@ -3584,6 +3594,18 @@ function buildSmartVariedAiOptions({ topic, platform, tone, cta, emojiStyle = 'r
 }
 
 async function callGeminiDirectForCopies({ apiKey, topic, platform, tone, cta, emojiStyle, variationSeed, previousProposals = [] }) {
+  const cleanKey = (apiKey || '').trim();
+  if (!cleanKey) {
+    throw new Error('Falta la API Key de Gemini. Pulsa "🔑 Conectar Gemini" para ingresarla.');
+  }
+
+  // Pre-validate key format: Google AI Studio API Keys always start with AIzaSy
+  if (!cleanKey.startsWith('AIzaSy')) {
+    throw new Error(
+      `La clave ingresada ("${cleanKey.slice(0, 8)}...") parece un App Secret de Meta. Las claves de Google Gemini empiezan con "AIzaSy..." y se obtienen gratis en Google AI Studio (aistudio.google.com/app/apikey).`
+    );
+  }
+
   const avoidBlock =
     previousProposals.length > 0
       ? `\nPROPUESTAS ANTERIORES QUE DEBES EVITAR REPETIR (crea enfoques, estructuras y primeras líneas 100% diferentes):\n${previousProposals
@@ -3612,31 +3634,51 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
   ]
 }`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-      apiKey
-    )}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 1.05,
-          topP: 0.95
-        }
-      })
-    }
-  );
+  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastErr = null;
+  let rawText = null;
 
-  const data = await res.json();
-  if (!res.ok || data.error) {
-    throw new Error(data?.error?.message || `Error Gemini HTTP ${res.status}`);
+  for (const model of candidateModels) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+          cleanKey
+        )}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 1.05,
+              topP: 0.95
+            }
+          })
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        const msg = data?.error?.message || `Error Gemini HTTP ${res.status}`;
+        if (msg.includes('API key not valid')) {
+          throw new Error('API key no válida. Las claves de Gemini empiezan con "AIzaSy..." y se obtienen gratis en Google AI Studio (aistudio.google.com/app/apikey).');
+        }
+        lastErr = new Error(msg);
+        continue;
+      }
+      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) break;
+    } catch (e) {
+      lastErr = e;
+      if (e.message && (e.message.includes('API key no válida') || e.message.includes('AIzaSy'))) {
+        throw e;
+      }
+    }
   }
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
   if (!rawText) {
-    throw new Error('Gemini no devolvió texto en la respuesta.');
+    throw lastErr || new Error('Gemini no devolvió texto en la respuesta.');
   }
 
   let parsed;

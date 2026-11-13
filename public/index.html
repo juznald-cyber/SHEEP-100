@@ -552,12 +552,20 @@
               </p>
 
               <div class="ai-key-box hidden" id="aiKeyConfigBox">
-                <label for="aiQuickGeminiKey">🔑 Gemini API Key (Google AI Studio — gratis, para respuestas 100% con Gemini 2.5 Flash)</label>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                  <label for="aiQuickGeminiKey" style="margin:0;font-weight:600;">🔑 Gemini API Key (Google AI Studio — Gratis)</label>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="btn-outline btn-xs" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                    🔗 Obtener Clave Gratis (Google AI Studio)
+                  </a>
+                </div>
                 <div class="ai-key-row">
-                  <input type="password" id="aiQuickGeminiKey" placeholder="AIzaSy... (Pega tu clave de Gemini aquí)" />
+                  <input type="password" id="aiQuickGeminiKey" placeholder="AIzaSy... (Pega tu clave de Google Gemini aquí)" />
+                  <button type="button" class="btn-outline btn-sm" id="btnToggleShowGeminiKey" title="Ver / Ocultar clave" onclick="const el=document.getElementById('aiQuickGeminiKey'); el.type = el.type==='password'?'text':'password';">👁️</button>
                   <button type="button" class="btn-primary btn-sm" id="btnSaveAiGeminiKey">💾 Guardar Key</button>
                 </div>
-                <small class="muted-text">Se sincroniza automáticamente con tu cuenta en la nube y con la configuración de Paso a Paso Meta.</small>
+                <div style="margin-top:6px;font-size:0.75rem;color:#94a3b8;line-height:1.4;">
+                  💡 <strong>Importante:</strong> Las API Keys de Google Gemini siempre comienzan con <code style="color:#38bdf8;">AIzaSy...</code> (aproximadamente 39 caracteres). No la confundas con el <em>App Secret</em> de Meta o claves de 32 caracteres.
+                </div>
               </div>
 
               <form id="formAiGenerator" class="ai-form">
