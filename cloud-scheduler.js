@@ -112,6 +112,163 @@ async function publishFacebookThreePhaseVideo({ fbPageId, pageToken, pageName, m
   return { publishId: finalId, videoId, label };
 }
 
+function resolveCarouselItemsCloud(post, mediaLibrary = []) {
+  const rawList = Array.isArray(post?.carouselItems) ? post.carouselItems : [];
+  const resolved = [];
+  for (const item of rawList) {
+    if (!item) continue;
+    let rawUrl = (typeof item === 'string' ? item : item.publicUrl || item.url || '').trim();
+    let linkedType = item.type || '';
+    if (item.mediaId && Array.isArray(mediaLibrary)) {
+      const m = mediaLibrary.find((x) => x.id === item.mediaId);
+      if (m) {
+        if (!rawUrl) rawUrl = (m.publicUrl || m.url || '').trim();
+        if (!linkedType) linkedType = m.type === 'video' || m.format === 'MP4' ? 'video' : 'image';
+      }
+    }
+    if (!rawUrl) continue;
+    const isVideo =
+      linkedType === 'video' ||
+      item.format === 'MP4' ||
+      /\.mp4(\?|$)/i.test(rawUrl) ||
+      /drive\.usercontent\.google\.com\/download/i.test(rawUrl);
+    const norm = normalizeCloudMedia(rawUrl, isVideo ? 'video' : 'image');
+    const finalUrl = norm.publicUrl || rawUrl;
+    if (finalUrl) resolved.push({ mediaUrl: finalUrl, isVideo });
+  }
+  return resolved;
+}
+
+async function publishInstagramCarousel({ igUserId, accessToken, items, caption }) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  if (!Array.isArray(items) || items.length < 2 || items.length > 10) {
+    throw new Error('Un Carrusel de Instagram requiere entre 2 y 10 diapositivas (fotos o videos).');
+  }
+
+  const childIds = [];
+  for (let i = 0; i < items.length; i++) {
+    const slide = items[i];
+    const cp = new URLSearchParams();
+    cp.append('access_token', accessToken);
+    cp.append('is_carousel_item', 'true');
+    if (slide.isVideo) {
+      cp.append('media_type', 'VIDEO');
+      cp.append('video_url', slide.mediaUrl);
+    } else {
+      cp.append('image_url', slide.mediaUrl);
+    }
+
+    const cRes = await fetch(`${graphBase}/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: cp.toString()
+    });
+    const cData = await cRes.json();
+    if (!cRes.ok || cData.error) {
+      throw new Error(`Slide ${i + 1} del carrusel falló: ${cData.error ? cData.error.message : 'Error creando slide'}`);
+    }
+
+    const childId = cData.id;
+    const maxPolls = slide.isVideo ? 30 : 10;
+    for (let attempt = 0; attempt < maxPolls; attempt++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const stRes = await fetch(
+        `${graphBase}/${childId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const stData = await stRes.json();
+      if (stData.status_code === 'FINISHED') break;
+      if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+        throw new Error(`Slide ${i + 1} rechazado por Instagram: ${stData.status || stData.status_code}`);
+      }
+    }
+    childIds.push(childId);
+  }
+
+  const parentParams = new URLSearchParams();
+  parentParams.append('access_token', accessToken);
+  parentParams.append('media_type', 'CAROUSEL');
+  parentParams.append('children', childIds.join(','));
+  parentParams.append('caption', caption || '');
+
+  const pRes = await fetch(`${graphBase}/${igUserId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: parentParams.toString()
+  });
+  const pData = await pRes.json();
+  if (!pRes.ok || pData.error) {
+    throw new Error(pData.error ? pData.error.message : 'Error creando contenedor padre de Carrusel');
+  }
+
+  const parentId = pData.id;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const stRes = await fetch(
+      `${graphBase}/${parentId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const stData = await stRes.json();
+    if (stData.status_code === 'FINISHED') break;
+    if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+      throw new Error(`Instagram rechazó el carrusel: ${stData.status || stData.status_code}`);
+    }
+  }
+
+  const pubParams = new URLSearchParams({ creation_id: parentId, access_token: accessToken });
+  const pubRes = await fetch(`${graphBase}/${igUserId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: pubParams.toString()
+  });
+  const pubData = await pubRes.json();
+  if (!pubRes.ok || pubData.error) {
+    throw new Error(pubData.error ? pubData.error.message : 'Error en media_publish del carrusel');
+  }
+
+  return {
+    containerId: parentId,
+    publishId: pubData.id,
+    label: `🎠 Carrusel (${items.length} slides) publicado en Instagram (ID: ${pubData.id})`
+  };
+}
+
+async function publishFacebookCarousel({ fbPageId, pageToken, pageName, items, caption }) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  const photoSlides = items.filter((it) => !it.isVideo);
+  if (photoSlides.length < 2) {
+    return await publishSingleFacebookPageItem({
+      fbPageId,
+      pageToken,
+      pageName,
+      mediaUrl: items[0].mediaUrl,
+      isVideoFile: items[0].isVideo,
+      caption,
+      targetMode: 'POST'
+    });
+  }
+
+  const attachedMedia = [];
+  for (const slide of photoSlides) {
+    const pp = new URLSearchParams({ url: slide.mediaUrl, published: 'false', access_token: pageToken });
+    const pr = await fetch(`${graphBase}/${fbPageId}/photos`, { method: 'POST', body: pp }).then((r) => r.json());
+    if (pr.error) throw new Error(pr.error.message);
+    attachedMedia.push({ media_fbid: pr.id });
+  }
+
+  const feedRes = await fetch(`${graphBase}/${fbPageId}/feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: caption || '', attached_media: attachedMedia, access_token: pageToken })
+  });
+  const feedData = await feedRes.json();
+  if (!feedRes.ok || feedData.error) {
+    throw new Error(feedData.error ? feedData.error.message : 'Error publicando carrusel en Facebook');
+  }
+  return {
+    publishId: feedData.id,
+    label: `🎠 Carrusel (${photoSlides.length} fotos) publicado en Facebook (${pageName} • ID: ${feedData.id})`
+  };
+}
+
 async function publishSingleInstagramItem({ igUserId, accessToken, mediaUrl, isVideoFile, caption, targetMode }) {
   const graphBase = 'https://graph.facebook.com/v22.0';
   const containerParams = new URLSearchParams();
@@ -475,13 +632,25 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = [], tiktokConfi
   const igUserId = (metaConfig.igUserId || '').trim();
   const fbPageId = (metaConfig.fbPageId || '102786358439057').trim();
 
+  const rawFormat =
+    post.postFormat ||
+    (post.mediaType === 'CAROUSEL'
+      ? 'CAROUSEL'
+      : post.mediaType === 'STORIES'
+      ? 'STORY'
+      : post.mediaType === 'REELS'
+      ? 'REEL'
+      : 'POST');
+  const isCarousel = rawFormat === 'CAROUSEL' || post.mediaType === 'CAROUSEL';
+  const carouselItems = isCarousel ? resolveCarouselItemsCloud(post, mediaLibrary) : [];
+
   let linkedType = 'image';
   if (post.mediaId && Array.isArray(mediaLibrary)) {
     const m = mediaLibrary.find((x) => x.id === post.mediaId);
     if (m && (m.type === 'video' || m.format === 'MP4')) linkedType = 'video';
   }
 
-  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || carouselItems[0]?.mediaUrl || '').trim();
   const isVid =
     linkedType === 'video' ||
     /\.mp4(\?|$)/i.test(rawMediaUrl) ||
@@ -492,10 +661,6 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = [], tiktokConfi
 
   const norm = normalizeCloudMedia(rawMediaUrl, isVid ? 'video' : 'image');
   const mediaUrl = norm.publicUrl || rawMediaUrl;
-
-  const rawFormat =
-    post.postFormat ||
-    (post.mediaType === 'STORIES' ? 'STORY' : post.mediaType === 'REELS' ? 'REEL' : 'POST');
 
   const targetModes =
     rawFormat === 'BOTH'
@@ -511,23 +676,46 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = [], tiktokConfi
     throw new Error('No hay Access Token de Meta configurado en Firebase.');
   }
 
+  if (isCarousel && carouselItems.length < 2) {
+    throw new Error('El Carrusel programado no tiene al menos 2 slides con URL pública.');
+  }
+
   const messages = [];
   let lastContainerId = '';
   let lastPublishId = '';
+  let igPublishId = '';
+  let fbPublishId = '';
+  let tiktokPublishId = '';
 
   if (wantInstagram && igUserId) {
-    for (const mode of targetModes) {
-      const igRes = await publishSingleInstagramItem({
+    if (isCarousel) {
+      const igRes = await publishInstagramCarousel({
         igUserId,
         accessToken,
-        mediaUrl,
-        isVideoFile: isVid,
-        caption: post.caption || '',
-        targetMode: mode
+        items: carouselItems,
+        caption: post.caption || ''
       });
       lastContainerId = igRes.containerId || lastContainerId;
       lastPublishId = igRes.publishId || lastPublishId;
+      igPublishId = igRes.publishId || igPublishId;
       messages.push(igRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const igRes = await publishSingleInstagramItem({
+          igUserId,
+          accessToken,
+          mediaUrl,
+          isVideoFile: isVid,
+          caption: post.caption || '',
+          targetMode: mode
+        });
+        lastContainerId = igRes.containerId || lastContainerId;
+        lastPublishId = igRes.publishId || lastPublishId;
+        if (mode !== 'STORY' || !igPublishId) {
+          igPublishId = igRes.publishId || igPublishId;
+        }
+        messages.push(igRes.label);
+      }
     }
   }
 
@@ -548,39 +736,61 @@ async function publishCloudPost(post, metaConfig, mediaLibrary = [], tiktokConfi
 
     if (!pageToken) pageToken = accessToken;
 
-    for (const mode of targetModes) {
-      const fbRes = await publishSingleFacebookPageItem({
+    if (isCarousel) {
+      const fbRes = await publishFacebookCarousel({
         fbPageId,
         pageToken,
         pageName,
-        mediaUrl,
-        isVideoFile: isVid,
-        caption: post.caption || '',
-        targetMode: mode
+        items: carouselItems,
+        caption: post.caption || ''
       });
       lastPublishId = fbRes.publishId || lastPublishId;
+      fbPublishId = fbRes.publishId || fbPublishId;
       messages.push(fbRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const fbRes = await publishSingleFacebookPageItem({
+          fbPageId,
+          pageToken,
+          pageName,
+          mediaUrl,
+          isVideoFile: isVid,
+          caption: post.caption || '',
+          targetMode: mode
+        });
+        lastPublishId = fbRes.publishId || lastPublishId;
+        fbPublishId = fbRes.publishId || fbPublishId;
+        messages.push(fbRes.label);
+      }
     }
   }
 
   if (wantTikTok) {
-    if (!isVid) {
+    const ttMediaUrl = isCarousel ? carouselItems.find((it) => it.isVideo)?.mediaUrl : mediaUrl;
+    if (!isCarousel && !isVid) {
       throw new Error('TikTok Content Posting API requiere un archivo de video MP4.');
+    }
+    if (isCarousel && !ttMediaUrl) {
+      throw new Error('TikTok requiere un archivo de video MP4; desmarca TikTok en carruseles de solo fotos.');
     }
     const ttRes = await publishVideoToTikTokViaFileUpload({
       accessToken: tiktokConfig?.accessToken,
-      mediaUrl,
+      mediaUrl: ttMediaUrl || mediaUrl,
       title: post.caption || post.title || '',
       deliveryMode: tiktokConfig?.deliveryMode || 'DIRECT',
       tiktokConfig
     });
     lastPublishId = ttRes.publishId || lastPublishId;
+    tiktokPublishId = ttRes.publishId || tiktokPublishId;
     messages.push(ttRes.label);
   }
 
   return {
     containerId: lastContainerId,
-    mediaPublishId: lastPublishId,
+    mediaPublishId: igPublishId || fbPublishId || tiktokPublishId || lastPublishId,
+    igPublishId,
+    fbPublishId,
+    tiktokPublishId,
     message: messages.join(' + ')
   };
 }
@@ -761,6 +971,9 @@ async function runCloudScheduler() {
       post.publishedAt = new Date().toISOString();
       post.metaContainerId = result.containerId;
       post.metaPublishId = result.mediaPublishId;
+      if (result.igPublishId) post.igPublishId = result.igPublishId;
+      if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+      if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
       post.logs = post.logs || [];
       post.logs.push({
         time: new Date().toISOString(),

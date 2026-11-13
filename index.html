@@ -282,6 +282,7 @@
                   <div class="filter-pills" id="postFilterPills">
                     <button class="pill active" data-filter="all">Todos</button>
                     <button class="pill" data-filter="POST">📸 Posts / Reels</button>
+                    <button class="pill" data-filter="CAROUSEL">🎠 Carruseles</button>
                     <button class="pill" data-filter="STORY">⭕ Historias (24h)</button>
                     <button class="pill" data-filter="scheduled">⏰ Programados</button>
                     <button class="pill" data-filter="published">✔ Publicados</button>
@@ -370,93 +371,95 @@
           <div class="metrics-layout">
             <!-- Banner superior de sincronización de métricas -->
             <div class="metrics-header-card">
-              <div>
-                <span class="hero-pill">📊 ANALÍTICA INTEGRADA DE INSTAGRAM & FACEBOOK</span>
+              <div style="flex:1;min-width:0;">
+                <span class="hero-pill">📊 ANALÍTICA EN VIVO DE INSTAGRAM & FACEBOOK</span>
                 <h3>Centro de Métricas y Rendimiento — SHEEP 100</h3>
-                <p class="muted-text" style="margin-bottom:0;">
-                  Revisa el alcance, interacciones, retención de Historias y crecimiento de tu cuenta. Si ya conectaste tu Token de Meta, pulsa <strong>"Sincronizar con Meta Insights"</strong> para traer los datos en vivo de tu cuenta.
+                <p class="muted-text" style="margin-bottom:8px;">
+                  Alcance, visualizaciones, interacciones, retención de Historias y crecimiento real desde Meta Graph API v22.0. Se actualiza automáticamente al abrir esta pestaña o al pulsar el botón.
                 </p>
+                <div class="metrics-sync-meta" id="metricsSyncMeta">
+                  ⏳ Verificando conexión con Meta Insights...
+                </div>
               </div>
               <div class="metrics-actions">
                 <button class="btn-primary" id="btnSyncMetaMetrics">
-                  🔄 Sincronizar con Meta Insights API
+                  🔄 Actualizar Métricas en Vivo
                 </button>
               </div>
             </div>
+
+            <div class="metrics-alert-banner hidden" id="metricsAlertBanner"></div>
 
             <!-- Tarjetas KPI Principales -->
             <div class="kpi-grid-4">
               <div class="kpi-card">
                 <div class="kpi-top">
                   <span class="kpi-label">👥 Seguidores Totales</span>
-                  <span class="kpi-trend up" id="kpiFollowersTrend">+4.2%</span>
+                  <span class="kpi-trend up" id="kpiFollowersTrend">—</span>
                 </div>
-                <div class="kpi-value" id="kpiFollowersVal">4,820</div>
-                <div class="kpi-sub">Cuenta Instagram Business</div>
+                <div class="kpi-value" id="kpiFollowersVal">—</div>
+                <div class="kpi-sub" id="kpiFollowersSub">Cuenta Instagram Business</div>
               </div>
 
               <div class="kpi-card">
                 <div class="kpi-top">
-                  <span class="kpi-label">👁️ Cuentas Alcanzadas (Alcance)</span>
-                  <span class="kpi-trend up" id="kpiReachTrend">+18.6%</span>
+                  <span class="kpi-label">👁️ Alcance Total (Cuentas)</span>
+                  <span class="kpi-trend up" id="kpiReachTrend">—</span>
                 </div>
-                <div class="kpi-value" id="kpiReachVal">14,950</div>
-                <div class="kpi-sub">Posts + Reels + Historias</div>
+                <div class="kpi-value" id="kpiReachVal">0</div>
+                <div class="kpi-sub" id="kpiReachSub">Posts + Carruseles + Reels + Historias</div>
               </div>
 
               <div class="kpi-card">
                 <div class="kpi-top">
                   <span class="kpi-label">💬 Interacciones Totales</span>
-                  <span class="kpi-trend up" id="kpiEngagementTrend">+12.4%</span>
+                  <span class="kpi-trend up" id="kpiEngagementTrend">—</span>
                 </div>
-                <div class="kpi-value" id="kpiInteractionsVal">1,385</div>
-                <div class="kpi-sub">Likes, Comentarios, Guardados y DMs</div>
+                <div class="kpi-value" id="kpiInteractionsVal">0</div>
+                <div class="kpi-sub">Likes, Comentarios, Guardados y Compartidos</div>
               </div>
 
               <div class="kpi-card">
                 <div class="kpi-top">
                   <span class="kpi-label">🔥 Engagement Rate Promedio</span>
-                  <span class="kpi-trend up">Excelente</span>
+                  <span class="kpi-trend up" id="kpiErTrend">—</span>
                 </div>
-                <div class="kpi-value" id="kpiErVal">6.8%</div>
-                <div class="kpi-sub">Supera el promedio del sector (3.5%)</div>
+                <div class="kpi-value" id="kpiErVal">0%</div>
+                <div class="kpi-sub">Interacciones sobre alcance real</div>
               </div>
             </div>
 
-            <!-- Segunda fila: Gráfico por Día + Comparativa Posts vs Historias vs Reels -->
+            <!-- Segunda fila: Gráfico por Día + Comparativa Posts vs Carrusel vs Historias vs Reels -->
             <div class="metrics-charts-grid">
               <div class="card">
                 <div class="section-header-row">
-                  <h3>📈 Evolución de Alcance y Visualizaciones (Últimos 7 días)</h3>
-                  <span class="badge">Posts + Historias</span>
+                  <h3>📈 Evolución de Alcance Diario (Últimos 7 días)</h3>
+                  <span class="badge" id="weeklyChartSourceBadge">Instagram Insights</span>
                 </div>
                 <div class="bar-chart-container" id="weeklyReachChart"></div>
               </div>
 
               <div class="card">
-                <h3>⚡ Rendimiento por Formato (Post vs. Historia vs. Reel)</h3>
+                <h3>⚡ Rendimiento por Formato (Post vs. Carrusel vs. Historia vs. Reel)</h3>
                 <p class="muted-text">
-                  Comparativa de alcance promedio y tasa de respuesta según el tipo de publicación programada en SHEEP 100:
+                  Comparativa real de alcance e interacción acumulada según el tipo de publicación:
                 </p>
                 <div id="formatBreakdownContainer" class="format-breakdown-list"></div>
 
                 <hr class="divider" />
                 <h4>⏰ Mejores Horarios Detectados para tu Audiencia</h4>
-                <div class="best-times-chips">
-                  <span class="time-chip">🔥 Lun y Mié • 18:30 hrs (Posts)</span>
-                  <span class="time-chip">⭕ Todos los días • 09:30 y 20:00 hrs (Historias)</span>
-                  <span class="time-chip">🎬 Jue y Vie • 13:00 hrs (Reels)</span>
-                </div>
+                <div class="best-times-chips" id="bestTimesChips"></div>
               </div>
             </div>
 
             <!-- Tabla de Métricas por Publicación e Historia -->
             <div class="card">
               <div class="section-header-row">
-                <h3>📋 Desglose de Métricas por Post e Historia</h3>
+                <h3>📋 Desglose de Métricas por Post, Carrusel e Historia</h3>
                 <div class="filter-pills" id="metricsFilterPills">
                   <button class="pill active" data-mfilter="all">Todos</button>
                   <button class="pill" data-mfilter="POST">📸 Posts / Reels</button>
+                  <button class="pill" data-mfilter="CAROUSEL">🎠 Carruseles</button>
                   <button class="pill" data-mfilter="STORY">⭕ Historias</button>
                 </div>
               </div>
@@ -1016,7 +1019,7 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
       <form id="formPostComposer" class="composer-form">
         <input type="hidden" id="postId" />
 
-        <!-- SELECTOR DESTACADO: SOLO POST vs SOLO HISTORIA (24H) vs SOLO REEL vs AMBOS -->
+        <!-- SELECTOR DESTACADO: POST vs CARRUSEL vs HISTORIA vs REEL vs AMBOS -->
         <label style="margin-bottom:6px;">¿Dónde deseas publicar este contenido?</label>
         <div class="format-selector-cards" id="formatSelectorCards">
           <label class="format-choice active" data-format-card="POST">
@@ -1028,12 +1031,21 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
             </div>
           </label>
 
+          <label class="format-choice carousel-choice" data-format-card="CAROUSEL">
+            <input type="radio" name="postFormatRadio" value="CAROUSEL" />
+            <span class="format-icon">🎠</span>
+            <div>
+              <strong>Carrusel (2–10)</strong>
+              <small>Varias fotos/videos deslizables</small>
+            </div>
+          </label>
+
           <label class="format-choice story-choice" data-format-card="STORY">
             <input type="radio" name="postFormatRadio" value="STORY" />
             <span class="format-icon">⭕</span>
             <div>
               <strong>Solo Historia (24h)</strong>
-              <small>Exclusivo en Historias (No va a Reels)</small>
+              <small>Exclusivo en Historias</small>
             </div>
           </label>
 
@@ -1050,8 +1062,8 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
             <input type="radio" name="postFormatRadio" value="BOTH" />
             <span class="format-icon">🔥</span>
             <div>
-              <strong>Ambos (Historia + Reel/Post)</strong>
-              <small>Se publica en Historia 24h Y en Reels/Feed</small>
+              <strong>Ambos (Historia + Post)</strong>
+              <small>Historia 24h y Reels/Feed</small>
             </div>
           </label>
         </div>
@@ -1068,17 +1080,42 @@ Body: { creation_id: "ID_CONTENEDOR" }</pre>
               <span>Selecciona un medio de tu librería o pega una URL abajo</span>
             </div>
 
-            <label>Elegir de tu Media Library</label>
-            <select id="postMediaSelect">
-              <option value="">-- Seleccionar de Media Library --</option>
-            </select>
+            <div id="singleMediaFields">
+              <label>Elegir de tu Media Library</label>
+              <select id="postMediaSelect">
+                <option value="">-- Seleccionar de Media Library --</option>
+              </select>
 
-            <label>URL Pública para Meta Graph API (https://...jpg o .mp4)</label>
-            <input type="url" id="postPublicMediaUrl" placeholder="https://images.unsplash.com/..." required />
+              <label>URL Pública para Meta Graph API (https://...jpg o .mp4)</label>
+              <input type="url" id="postPublicMediaUrl" placeholder="https://images.unsplash.com/..." required />
+            </div>
+
+            <!-- CONSTRUCTOR DE CARRUSEL (2 a 10 slides) -->
+            <div id="carouselBuilderPanel" class="carousel-builder-panel hidden">
+              <div class="carousel-builder-head">
+                <label style="margin:0;">🎠 Diapositivas del Carrusel</label>
+                <span class="badge" id="carouselCountBadge">0 / 10 (mín. 2)</span>
+              </div>
+
+              <div class="carousel-picker-label">Toca medios de tu Media Library para agregarlos en orden:</div>
+              <div class="carousel-library-picker" id="carouselLibraryPicker"></div>
+
+              <div class="carousel-url-add-row">
+                <input type="url" id="carouselAddUrlInput" placeholder="O pega URL (Google Drive o https://...jpg/.mp4)" />
+                <select id="carouselAddUrlType">
+                  <option value="image">JPG</option>
+                  <option value="video">MP4</option>
+                </select>
+                <button type="button" class="btn-secondary btn-sm" id="btnAddCarouselUrl">＋ Añadir</button>
+              </div>
+
+              <div class="carousel-slides-list" id="carouselSlidesList"></div>
+            </div>
 
             <label>Formato Técnico Meta API</label>
             <select id="postMediaType">
               <option value="IMAGE">📸 Solo Post de Feed (Imagen JPG)</option>
+              <option value="CAROUSEL">🎠 Carrusel (2 a 10 Fotos / Videos)</option>
               <option value="STORIES">⭕ Solo Historia 24h (JPG o Video MP4)</option>
               <option value="REELS">🎬 Solo Reel (Video MP4)</option>
               <option value="BOTH">🔥 Ambos: Historia 24h + Reel/Post</option>

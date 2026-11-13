@@ -759,6 +759,180 @@ app.post('/api/meta/fb-rupload', async (req, res) => {
   }
 });
 
+function resolveCarouselItemsServer(post, mediaLibrary = []) {
+  const rawList = Array.isArray(post?.carouselItems) ? post.carouselItems : [];
+  const resolved = [];
+  for (const item of rawList) {
+    if (!item) continue;
+    let rawUrl = (typeof item === 'string' ? item : item.publicUrl || item.url || '').trim();
+    let linkedType = item.type || '';
+    if (item.mediaId && Array.isArray(mediaLibrary)) {
+      const m = mediaLibrary.find((x) => x.id === item.mediaId);
+      if (m) {
+        if (!rawUrl) rawUrl = (m.publicUrl || m.url || '').trim();
+        if (!linkedType) linkedType = m.type === 'video' || m.format === 'MP4' ? 'video' : 'image';
+      }
+    }
+    if (!rawUrl) continue;
+    const isVideo =
+      linkedType === 'video' ||
+      item.format === 'MP4' ||
+      /\.mp4(\?|$)/i.test(rawUrl) ||
+      /drive\.usercontent\.google\.com\/download/i.test(rawUrl);
+    const norm = normalizeCloudMediaServer(rawUrl, isVideo ? 'video' : 'image');
+    const finalUrl = norm.publicUrl || rawUrl;
+    if (finalUrl) {
+      resolved.push({ mediaUrl: finalUrl, isVideo });
+    }
+  }
+  return resolved;
+}
+
+async function publishInstagramCarousel({ igUserId, accessToken, items, caption }) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  if (!Array.isArray(items) || items.length < 2 || items.length > 10) {
+    throw new Error('Un Carrusel de Instagram requiere entre 2 y 10 diapositivas (fotos o videos).');
+  }
+
+  const childIds = [];
+  for (let i = 0; i < items.length; i++) {
+    const slide = items[i];
+    const cp = new URLSearchParams();
+    cp.append('access_token', accessToken);
+    cp.append('is_carousel_item', 'true');
+    if (slide.isVideo) {
+      cp.append('media_type', 'VIDEO');
+      cp.append('video_url', slide.mediaUrl);
+    } else {
+      cp.append('image_url', slide.mediaUrl);
+    }
+
+    const cRes = await fetch(`${graphBase}/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: cp.toString()
+    });
+    const cData = await cRes.json();
+    if (!cRes.ok || cData.error) {
+      const errMsg = cData.error ? `${cData.error.message} (Code ${cData.error.code})` : 'Error creando slide';
+      throw new Error(`Slide ${i + 1} del carrusel falló: ${errMsg}`);
+    }
+
+    const childId = cData.id;
+    const maxPolls = slide.isVideo ? 30 : 10;
+    for (let attempt = 0; attempt < maxPolls; attempt++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const stRes = await fetch(
+        `${graphBase}/${childId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const stData = await stRes.json();
+      if (stData.status_code === 'FINISHED') break;
+      if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+        throw new Error(`Slide ${i + 1} rechazado por Instagram: ${stData.status || stData.status_code}`);
+      }
+    }
+    childIds.push(childId);
+  }
+
+  const parentParams = new URLSearchParams();
+  parentParams.append('access_token', accessToken);
+  parentParams.append('media_type', 'CAROUSEL');
+  parentParams.append('children', childIds.join(','));
+  parentParams.append('caption', caption || '');
+
+  const pRes = await fetch(`${graphBase}/${igUserId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: parentParams.toString()
+  });
+  const pData = await pRes.json();
+  if (!pRes.ok || pData.error) {
+    const errMsg = pData.error ? `${pData.error.message} (Code ${pData.error.code})` : 'Error creando carrusel';
+    throw new Error(`Contenedor padre Carrusel falló: ${errMsg}`);
+  }
+
+  const parentId = pData.id;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const stRes = await fetch(
+      `${graphBase}/${parentId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const stData = await stRes.json();
+    if (stData.status_code === 'FINISHED') break;
+    if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+      throw new Error(`Instagram rechazó el carrusel: ${stData.status || stData.status_code}`);
+    }
+  }
+
+  const pubParams = new URLSearchParams({
+    creation_id: parentId,
+    access_token: accessToken
+  });
+  const pubRes = await fetch(`${graphBase}/${igUserId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: pubParams.toString()
+  });
+  const pubData = await pubRes.json();
+  if (!pubRes.ok || pubData.error) {
+    const errMsg = pubData.error ? `${pubData.error.message} (Code ${pubData.error.code})` : 'Error en media_publish';
+    throw new Error(`Publicación de carrusel falló: ${errMsg}`);
+  }
+
+  return {
+    containerId: parentId,
+    publishId: pubData.id,
+    label: `🎠 Carrusel (${items.length} slides) publicado en Instagram (ID: ${pubData.id})`
+  };
+}
+
+async function publishFacebookCarousel({ fbPageId, pageToken, pageName, items, caption }) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  const photoSlides = items.filter((it) => !it.isVideo);
+  if (photoSlides.length < 2) {
+    return await publishSingleFacebookPageItem({
+      fbPageId,
+      pageToken,
+      pageName,
+      mediaUrl: items[0].mediaUrl,
+      isVideoFile: items[0].isVideo,
+      caption,
+      targetMode: 'POST'
+    });
+  }
+
+  const attachedMedia = [];
+  for (const slide of photoSlides) {
+    const pp = new URLSearchParams({
+      url: slide.mediaUrl,
+      published: 'false',
+      access_token: pageToken
+    });
+    const pr = await fetch(`${graphBase}/${fbPageId}/photos`, { method: 'POST', body: pp }).then((r) => r.json());
+    if (pr.error) throw new Error(pr.error.message);
+    attachedMedia.push({ media_fbid: pr.id });
+  }
+
+  const feedRes = await fetch(`${graphBase}/${fbPageId}/feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: caption || '',
+      attached_media: attachedMedia,
+      access_token: pageToken
+    })
+  });
+  const feedData = await feedRes.json();
+  if (!feedRes.ok || feedData.error) {
+    throw new Error(feedData.error ? feedData.error.message : 'Error publicando carrusel en Facebook Page');
+  }
+  const finalId = feedData.id;
+  return {
+    publishId: finalId,
+    label: `🎠 Carrusel (${photoSlides.length} fotos) publicado en Facebook (${pageName} • ID: ${finalId})`
+  };
+}
+
 async function publishSingleInstagramItem({ igUserId, accessToken, mediaUrl, isVideoFile, caption, targetMode }) {
   const graphBase = 'https://graph.facebook.com/v22.0';
   const containerParams = new URLSearchParams();
@@ -932,8 +1106,21 @@ async function publishSingleFacebookPageItem({ fbPageId, pageToken, pageName, me
 }
 
 async function publishToMetaInstagram(post, metaConfig) {
+  const db = readDb();
   const { accessToken, igUserId, simulationFallback } = metaConfig;
-  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
+  const rawFormat =
+    post.postFormat ||
+    (post.mediaType === 'CAROUSEL'
+      ? 'CAROUSEL'
+      : post.mediaType === 'STORIES'
+      ? 'STORY'
+      : post.mediaType === 'REELS'
+      ? 'REEL'
+      : 'POST');
+  const isCarousel = rawFormat === 'CAROUSEL' || post.mediaType === 'CAROUSEL';
+  const carouselItems = isCarousel ? resolveCarouselItemsServer(post, db.mediaLibrary || []) : [];
+
+  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || carouselItems[0]?.mediaUrl || '').trim();
   const isVid =
     /\.mp4(\?|$)/i.test(rawMediaUrl) ||
     /drive\.usercontent\.google\.com\/download/i.test(rawMediaUrl) ||
@@ -944,7 +1131,9 @@ async function publishToMetaInstagram(post, metaConfig) {
   const mediaUrl = norm.publicUrl || rawMediaUrl;
 
   const hasRealCredentials = Boolean(accessToken && (igUserId || metaConfig.fbPageId));
-  const isPublicHttpUrl = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
+  const isPublicHttpUrl = isCarousel
+    ? carouselItems.length >= 2 && carouselItems.every((it) => /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(it.mediaUrl))
+    : /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   if (!hasRealCredentials) {
     if (simulationFallback) {
@@ -960,6 +1149,10 @@ async function publishToMetaInstagram(post, metaConfig) {
     throw new Error(
       'Falta configurar el Access Token o el Instagram Business User ID en la sección de Configuración de Meta.'
     );
+  }
+
+  if (isCarousel && carouselItems.length < 2) {
+    throw new Error('Un Carrusel necesita entre 2 y 10 fotos/videos con URL pública https://.');
   }
 
   if (!isPublicHttpUrl) {
@@ -984,15 +1177,6 @@ async function publishToMetaInstagram(post, metaConfig) {
     /\.mp4(\?|$)/i.test(mediaUrl) ||
     /drive\.usercontent\.google\.com\/download/i.test(mediaUrl);
 
-  const rawFormat =
-    post.postFormat ||
-    (post.mediaType === 'STORIES' ? 'STORY' : post.mediaType === 'REELS' ? 'REEL' : 'POST');
-
-  // Determine which target modes to execute:
-  // - STORY -> ['STORY'] (Exclusivo Historia 24h)
-  // - REEL  -> ['REEL']  (Exclusivo Reel)
-  // - POST  -> ['POST']  (Exclusivo Post Feed)
-  // - BOTH  -> ['STORY', isVideoFile ? 'REEL' : 'POST'] (Historia 24h + Reel/Post)
   const targetModes =
     rawFormat === 'BOTH'
       ? ['STORY', isVideoFile ? 'REEL' : 'POST']
@@ -1005,21 +1189,40 @@ async function publishToMetaInstagram(post, metaConfig) {
   const messages = [];
   let lastContainerId = '';
   let lastPublishId = '';
+  let igPublishId = '';
+  let fbPublishId = '';
+  let tiktokPublishId = '';
 
   // 1. PUBLICAR EN INSTAGRAM (Solo si el usuario seleccionó Instagram)
   if (wantInstagram) {
-    for (const mode of targetModes) {
-      const igRes = await publishSingleInstagramItem({
+    if (isCarousel) {
+      const igRes = await publishInstagramCarousel({
         igUserId,
         accessToken,
-        mediaUrl,
-        isVideoFile,
-        caption: post.caption || '',
-        targetMode: mode
+        items: carouselItems,
+        caption: post.caption || ''
       });
       lastContainerId = igRes.containerId || lastContainerId;
       lastPublishId = igRes.publishId || lastPublishId;
+      igPublishId = igRes.publishId || igPublishId;
       messages.push(igRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const igRes = await publishSingleInstagramItem({
+          igUserId,
+          accessToken,
+          mediaUrl,
+          isVideoFile,
+          caption: post.caption || '',
+          targetMode: mode
+        });
+        lastContainerId = igRes.containerId || lastContainerId;
+        lastPublishId = igRes.publishId || lastPublishId;
+        if (mode !== 'STORY' || !igPublishId) {
+          igPublishId = igRes.publishId || igPublishId;
+        }
+        messages.push(igRes.label);
+      }
     }
   }
 
@@ -1036,34 +1239,52 @@ async function publishToMetaInstagram(post, metaConfig) {
     const pageToken = pageData.access_token || accessToken;
     const pageName = pageData.name || metaConfig.fbPageName || 'Facebook Page';
 
-    for (const mode of targetModes) {
-      const fbRes = await publishSingleFacebookPageItem({
+    if (isCarousel) {
+      const fbRes = await publishFacebookCarousel({
         fbPageId,
         pageToken,
         pageName,
-        mediaUrl,
-        isVideoFile,
-        caption: post.caption || '',
-        targetMode: mode
+        items: carouselItems,
+        caption: post.caption || ''
       });
       lastPublishId = fbRes.publishId || lastPublishId;
+      fbPublishId = fbRes.publishId || fbPublishId;
       messages.push(fbRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const fbRes = await publishSingleFacebookPageItem({
+          fbPageId,
+          pageToken,
+          pageName,
+          mediaUrl,
+          isVideoFile,
+          caption: post.caption || '',
+          targetMode: mode
+        });
+        lastPublishId = fbRes.publishId || lastPublishId;
+        fbPublishId = fbRes.publishId || fbPublishId;
+        messages.push(fbRes.label);
+      }
     }
   }
 
   // 3. PUBLICAR EN TIKTOK (Solo si el usuario seleccionó TikTok)
   const wantTikTok = platforms.includes('tiktok');
   if (wantTikTok) {
-    const db = readDb();
+    const ttMediaUrl = isCarousel ? carouselItems.find((it) => it.isVideo)?.mediaUrl : mediaUrl;
+    if (!ttMediaUrl && isCarousel) {
+      throw new Error('TikTok requiere un video MP4; para carruseles de solo fotos desmarca TikTok.');
+    }
     const ttCfg = post._tiktokConfig || db.tiktokConfig || {};
     const ttRes = await publishVideoToTikTokViaFileUpload({
       accessToken: ttCfg.accessToken,
-      mediaUrl,
+      mediaUrl: ttMediaUrl || mediaUrl,
       title: post.caption || post.title || 'Publicación SHEEP 100',
       deliveryMode: ttCfg.deliveryMode || 'DIRECT',
       tiktokConfig: ttCfg
     });
     lastPublishId = ttRes.publishId || lastPublishId;
+    tiktokPublishId = ttRes.publishId || tiktokPublishId;
     messages.push(ttRes.label);
   }
 
@@ -1071,7 +1292,10 @@ async function publishToMetaInstagram(post, metaConfig) {
     success: true,
     mode: 'live_meta_api',
     containerId: lastContainerId,
-    mediaPublishId: lastPublishId,
+    mediaPublishId: igPublishId || fbPublishId || tiktokPublishId || lastPublishId,
+    igPublishId,
+    fbPublishId,
+    tiktokPublishId,
     message: messages.join(' + ')
   };
 }
@@ -1221,6 +1445,7 @@ app.post('/api/posts', (req, res) => {
     publicMediaUrl,
     mediaType,
     postFormat,
+    carouselItems,
     platforms,
     status,
     scheduledAt,
@@ -1241,6 +1466,7 @@ app.post('/api/posts', (req, res) => {
       publicMediaUrl: publicMediaUrl ?? existing.publicMediaUrl,
       mediaType: mediaType ?? existing.mediaType,
       postFormat: postFormat ?? existing.postFormat ?? 'POST',
+      carouselItems: carouselItems ?? existing.carouselItems,
       platforms: platforms ?? existing.platforms,
       status: status ?? existing.status,
       scheduledAt: scheduledAt ?? existing.scheduledAt,
@@ -1268,7 +1494,16 @@ app.post('/api/posts', (req, res) => {
     mediaUrl: mediaUrl || '',
     publicMediaUrl: publicMediaUrl || mediaUrl || '',
     mediaType: mediaType || 'IMAGE',
-    postFormat: postFormat || (mediaType === 'STORIES' ? 'STORY' : mediaType === 'REELS' ? 'REEL' : 'POST'),
+    postFormat:
+      postFormat ||
+      (mediaType === 'CAROUSEL'
+        ? 'CAROUSEL'
+        : mediaType === 'STORIES'
+        ? 'STORY'
+        : mediaType === 'REELS'
+        ? 'REEL'
+        : 'POST'),
+    carouselItems: Array.isArray(carouselItems) ? carouselItems : undefined,
     platforms: Array.isArray(platforms) && platforms.length ? platforms : ['instagram'],
     status: status || 'scheduled',
     scheduledAt: scheduledAt || new Date(Date.now() + 3600 * 1000).toISOString(),
@@ -1348,6 +1583,9 @@ app.post('/api/posts/:id/publish', async (req, res) => {
     post.publishedAt = new Date().toISOString();
     post.metaContainerId = result.containerId;
     post.metaPublishId = result.mediaPublishId;
+    if (result.igPublishId) post.igPublishId = result.igPublishId;
+    if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+    if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
     post.logs = post.logs || [];
     post.logs.push({
       time: new Date().toISOString(),
@@ -1721,6 +1959,9 @@ setInterval(async () => {
                   post.publishedAt = new Date().toISOString();
                   post.metaContainerId = result.containerId;
                   post.metaPublishId = result.mediaPublishId;
+                  if (result.igPublishId) post.igPublishId = result.igPublishId;
+                  if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+                  if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
                   post.logs = post.logs || [];
                   post.logs.push({
                     time: new Date().toISOString(),
@@ -1775,6 +2016,9 @@ setInterval(async () => {
           post.publishedAt = new Date().toISOString();
           post.metaContainerId = result.containerId;
           post.metaPublishId = result.mediaPublishId;
+          if (result.igPublishId) post.igPublishId = result.igPublishId;
+          if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+          if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
           post.logs = post.logs || [];
           post.logs.push({
             time: new Date().toISOString(),

@@ -216,6 +216,10 @@ let currentPostFilter = 'all';
 let currentMetricsFilter = 'all';
 let deferredInstallPrompt = null;
 let notifiedPostIds = new Set();
+let isSyncingMetrics = false;
+let lastMetricsSyncAttemptAt = 0;
+let composerCarouselSlides = [];
+let composerCarouselPreviewIdx = 0;
 
 const TAB_TITLES = {
   calendar: '📅 Calendario Visual (Posts, Reels e Historias)',
@@ -263,6 +267,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initFirebaseCloud();
   checkSavedSession();
   checkTikTokOAuthCallback();
+
+  if (appState.metaConfig?.accessToken && appState.metaConfig?.igUserId) {
+    setTimeout(() => syncLiveMetaMetrics({ silent: true }), 1200);
+  }
+  setInterval(() => {
+    if (!document.hidden && appState.metaConfig?.accessToken && appState.metaConfig?.igUserId) {
+      syncLiveMetaMetrics({ silent: true });
+    }
+  }, 5 * 60 * 1000);
 
   setTimeout(runBrowserAutoScheduler, 1500);
   setInterval(runBrowserAutoScheduler, 25000);
@@ -379,15 +392,30 @@ function ensureSampleStoryExists() {
       p.publicMediaUrl = norm.driveId === '1_cIMm9K9ICM3LJvws_ypuWCoSF0lJqn6' ? norm.thumbUrl : norm.publicUrl;
     }
     if (!p.postFormat) {
-      p.postFormat = p.mediaType === 'STORIES' ? 'STORY' : p.mediaType === 'REELS' ? 'REEL' : 'POST';
+      p.postFormat =
+        p.mediaType === 'CAROUSEL'
+          ? 'CAROUSEL'
+          : p.mediaType === 'STORIES'
+          ? 'STORY'
+          : p.mediaType === 'REELS'
+          ? 'REEL'
+          : 'POST';
+    }
+    if (Array.isArray(p.carouselItems)) {
+      p.carouselItems = p.carouselItems.map((slide) => {
+        const sNorm = normalizeCloudMedia(
+          slide.publicUrl || slide.url || '',
+          slide.type === 'video' || slide.format === 'MP4' ? 'video' : 'image'
+        );
+        return {
+          ...slide,
+          url: sNorm.thumbUrl || slide.url,
+          publicUrl: sNorm.publicUrl || slide.publicUrl || slide.url
+        };
+      });
     }
     if (!p.metrics) {
-      p.metrics = {
-        reach: 1450 + idx * 680,
-        likes: 110 + idx * 55,
-        comments: 18 + idx * 9,
-        saves: 42 + idx * 21
-      };
+      p.metrics = { reach: 0, likes: 0, comments: 0, saves: 0 };
     }
   });
   const hasStory = appState.posts.some((p) => p.postFormat === 'STORY' || p.mediaType === 'STORIES');
@@ -457,7 +485,8 @@ function mergeProtectedState(baseState, incomingState) {
     },
     mediaLibrary: Array.isArray(inc.mediaLibrary) ? inc.mediaLibrary : base.mediaLibrary,
     posts: Array.isArray(inc.posts) ? inc.posts : base.posts,
-    hashtagGroups: Array.isArray(inc.hashtagGroups) ? inc.hashtagGroups : base.hashtagGroups
+    hashtagGroups: Array.isArray(inc.hashtagGroups) ? inc.hashtagGroups : base.hashtagGroups,
+    metricsMeta: inc.metricsMeta || base.metricsMeta || null
   };
 }
 
@@ -1000,6 +1029,14 @@ function switchTab(tabId) {
   if (contentArea && (window.innerWidth <= 960 || document.body.classList.contains('mobile-app-mode'))) {
     contentArea.scrollTop = 0;
   }
+  if (tabId === 'metrics') {
+    const stale = Date.now() - lastMetricsSyncAttemptAt > 60 * 1000;
+    if (stale && appState.metaConfig?.accessToken && appState.metaConfig?.igUserId) {
+      syncLiveMetaMetrics({ silent: true });
+    } else {
+      renderMetricsDashboard();
+    }
+  }
 }
 
 window.switchTab = switchTab;
@@ -1011,7 +1048,21 @@ function isPostStory(p) {
   return p.postFormat === 'STORY' || p.postFormat === 'BOTH' || p.mediaType === 'STORIES';
 }
 
+function isPostCarousel(p) {
+  return Boolean(
+    p &&
+      (p.postFormat === 'CAROUSEL' ||
+        p.mediaType === 'CAROUSEL' ||
+        p.mediaType === 'CAROUSEL_ALBUM' ||
+        (Array.isArray(p.carouselItems) && p.carouselItems.length >= 2))
+  );
+}
+
 function getPostFormatBadge(p) {
+  if (isPostCarousel(p)) {
+    const count = Array.isArray(p.carouselItems) && p.carouselItems.length ? p.carouselItems.length : 2;
+    return `<span class="carousel-pill-tag">🎠 CARRUSEL (${count})</span>`;
+  }
   if (p.postFormat === 'BOTH') {
     return `<span class="story-pill-tag" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;">🔥 HISTORIA + REEL/POST</span>`;
   }
@@ -1197,6 +1248,11 @@ function isPostVideo(post) {
 
 function getPostThumbnailUrl(post) {
   if (!post) return './icon.svg';
+  if (Array.isArray(post.carouselItems) && post.carouselItems.length > 0) {
+    const first = post.carouselItems[0];
+    const firstNorm = normalizeCloudMedia(first.url || first.publicUrl || '', first.type || 'image');
+    if (firstNorm.thumbUrl || first.url) return firstNorm.thumbUrl || first.url;
+  }
   if (post.mediaId && Array.isArray(appState.mediaLibrary)) {
     const linked = appState.mediaLibrary.find((m) => m.id === post.mediaId);
     if (linked && linked.url) {
@@ -1217,6 +1273,7 @@ function renderPostsQueue() {
 
   const filtered = appState.posts.filter((p) => {
     if (currentPostFilter === 'all') return true;
+    if (currentPostFilter === 'CAROUSEL') return isPostCarousel(p);
     if (currentPostFilter === 'STORY') return isPostStory(p);
     if (currentPostFilter === 'POST') return p.postFormat !== 'STORY' && p.mediaType !== 'STORIES';
     return p.status === currentPostFilter;
@@ -1244,18 +1301,20 @@ function renderPostsQueue() {
         : 'Sin fecha';
       const lastLog = p.logs && p.logs.length ? p.logs[p.logs.length - 1].message : '';
       const storyFlag = isPostStory(p);
+      const carouselFlag = isPostCarousel(p);
       const thumbUrl = getPostThumbnailUrl(p);
-      const btnActionLabel =
-        p.postFormat === 'BOTH'
-          ? '🚀 Publicar Historia + Reel Ahora'
-          : p.postFormat === 'STORY' || p.mediaType === 'STORIES'
-          ? '⭕ Publicar Solo Historia Ahora'
-          : p.postFormat === 'REEL' || p.mediaType === 'REELS'
-          ? '🎬 Publicar Solo Reel Ahora'
-          : '📸 Publicar Solo Post Ahora';
+      const btnActionLabel = carouselFlag
+        ? '🎠 Publicar Carrusel Ahora'
+        : p.postFormat === 'BOTH'
+        ? '🚀 Publicar Historia + Reel Ahora'
+        : p.postFormat === 'STORY' || p.mediaType === 'STORIES'
+        ? '⭕ Publicar Solo Historia Ahora'
+        : p.postFormat === 'REEL' || p.mediaType === 'REELS'
+        ? '🎬 Publicar Solo Reel Ahora'
+        : '📸 Publicar Solo Post Ahora';
 
       return `
-        <div class="queue-row" style="${storyFlag ? 'border-left: 4px solid #ec4899;' : ''}">
+        <div class="queue-row" style="${storyFlag ? 'border-left: 4px solid #ec4899;' : carouselFlag ? 'border-left: 4px solid #06b6d4;' : ''}">
           <div class="queue-row-left">
             <img src="${escapeHtml(thumbUrl)}" class="queue-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
             <div class="queue-row-info">
@@ -1715,27 +1774,234 @@ async function executeTikTokPublish(post, mediaUrl, isVideoFile) {
   throw lastError || new Error('Tiempo de espera agotado al transferir video MP4 a TikTok');
 }
 
+// Resolve ordered Carousel slides into verified public image/video URLs
+function resolveCarouselItemsClient(post) {
+  const rawList = Array.isArray(post?.carouselItems) ? post.carouselItems : [];
+  const resolved = [];
+  for (const item of rawList) {
+    if (!item) continue;
+    let rawUrl = (typeof item === 'string' ? item : item.publicUrl || item.url || '').trim();
+    let linkedType = item.type || '';
+    if (item.mediaId && Array.isArray(appState.mediaLibrary)) {
+      const m = appState.mediaLibrary.find((x) => x.id === item.mediaId);
+      if (m) {
+        if (!rawUrl) rawUrl = (m.publicUrl || m.url || '').trim();
+        if (!linkedType) linkedType = m.type === 'video' || m.format === 'MP4' ? 'video' : 'image';
+      }
+    }
+    if (!rawUrl) continue;
+    const isVideo =
+      linkedType === 'video' ||
+      item.format === 'MP4' ||
+      /\.mp4(\?|$)/i.test(rawUrl) ||
+      /drive\.usercontent\.google\.com\/download/i.test(rawUrl);
+    const norm = normalizeCloudMedia(rawUrl, isVideo ? 'video' : 'image');
+    const finalUrl = norm.publicUrl || rawUrl;
+    if (finalUrl) {
+      resolved.push({
+        mediaUrl: finalUrl,
+        thumbUrl: norm.thumbUrl || finalUrl,
+        isVideo
+      });
+    }
+  }
+  return resolved;
+}
+
+// Publish Carousel (2-10 mixed photos/videos) to Instagram Business via Meta Graph API
+async function executeInstagramCarouselPublish(post, accessToken, igUserId, items) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  if (!Array.isArray(items) || items.length < 2 || items.length > 10) {
+    throw new Error('Un Carrusel de Instagram requiere entre 2 y 10 diapositivas.');
+  }
+
+  const childIds = [];
+  for (let i = 0; i < items.length; i++) {
+    const slide = items[i];
+    showToast(`🎠 Preparando diapositiva ${i + 1} de ${items.length} en Instagram...`);
+    const cp = new URLSearchParams();
+    cp.append('access_token', accessToken);
+    cp.append('is_carousel_item', 'true');
+    if (slide.isVideo) {
+      cp.append('media_type', 'VIDEO');
+      cp.append('video_url', slide.mediaUrl);
+    } else {
+      cp.append('image_url', slide.mediaUrl);
+    }
+
+    const cRes = await fetch(`${graphBase}/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: cp.toString()
+    });
+    const cData = await cRes.json();
+    if (!cRes.ok || cData.error) {
+      const msg = cData.error ? cData.error.message : 'Error creando slide del carrusel';
+      if (/expired/i.test(msg)) {
+        throw new Error(
+          'Tu Access Token de Meta expiró. Genera uno nuevo en Graph API Explorer y pégalo en Paso a Paso Meta.'
+        );
+      }
+      throw new Error(`Slide ${i + 1}: ${msg}`);
+    }
+
+    const childId = cData.id;
+    const maxAttempts = slide.isVideo ? 30 : 10;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      try {
+        const stRes = await fetch(
+          `${graphBase}/${childId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+        );
+        const stData = await stRes.json();
+        if (stData.status_code === 'FINISHED') break;
+        if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+          throw new Error(`Instagram rechazó la diapositiva ${i + 1}: ${stData.status || stData.status_code}`);
+        }
+      } catch (pollErr) {
+        if (pollErr.message && pollErr.message.startsWith('Instagram rechazó')) throw pollErr;
+      }
+    }
+    childIds.push(childId);
+  }
+
+  const parentParams = new URLSearchParams();
+  parentParams.append('access_token', accessToken);
+  parentParams.append('media_type', 'CAROUSEL');
+  parentParams.append('children', childIds.join(','));
+  parentParams.append('caption', post.caption || '');
+
+  const pRes = await fetch(`${graphBase}/${igUserId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: parentParams.toString()
+  });
+  const pData = await pRes.json();
+  if (!pRes.ok || pData.error) {
+    throw new Error(pData.error ? pData.error.message : 'Error creando el contenedor padre del Carrusel');
+  }
+
+  const parentId = pData.id;
+  for (let attempt = 1; attempt <= 15; attempt++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    try {
+      const stRes = await fetch(
+        `${graphBase}/${parentId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const stData = await stRes.json();
+      if (stData.status_code === 'FINISHED') break;
+      if (stData.status_code === 'ERROR' || stData.status_code === 'EXPIRED') {
+        throw new Error(`Instagram rechazó el carrusel: ${stData.status || stData.status_code}`);
+      }
+    } catch (pollErr) {
+      if (pollErr.message && pollErr.message.startsWith('Instagram rechazó')) throw pollErr;
+    }
+  }
+
+  const pubParams = new URLSearchParams({ creation_id: parentId, access_token: accessToken });
+  const pubRes = await fetch(`${graphBase}/${igUserId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: pubParams.toString()
+  });
+  const pubData = await pubRes.json();
+  if (!pubRes.ok || pubData.error) {
+    throw new Error(pubData.error ? pubData.error.message : 'Error publicando Carrusel en Instagram');
+  }
+
+  return {
+    containerId: parentId,
+    publishId: pubData.id,
+    label: `🎠 Carrusel (${items.length} slides) publicado en Instagram (ID: ${pubData.id})`
+  };
+}
+
+// Publish Multi-Photo Carousel to Facebook Page using /photos (published=false) + /feed attached_media
+async function executeFacebookCarouselPublish(post, cfg, items) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  const userToken = (cfg.accessToken || '').trim();
+  const fbPageId = (cfg.fbPageId || '102786358439057').trim();
+
+  const pageRes = await fetch(
+    `${graphBase}/${fbPageId}?fields=id,name,access_token&access_token=${encodeURIComponent(userToken)}`
+  );
+  const pageData = await pageRes.json();
+  if (!pageRes.ok || pageData.error) {
+    throw new Error(pageData.error ? pageData.error.message : 'No se pudo obtener el Page Access Token de Facebook');
+  }
+  const pageToken = pageData.access_token || userToken;
+  const pageName = pageData.name || cfg.fbPageName || 'Facebook Page';
+
+  const photoSlides = items.filter((it) => !it.isVideo);
+  if (photoSlides.length < 2) {
+    return await executeFacebookPagePublish(post, cfg, items[0].mediaUrl, items[0].isVideo, 'POST');
+  }
+
+  const attachedMedia = [];
+  for (const slide of photoSlides) {
+    const p1 = new URLSearchParams();
+    p1.append('url', slide.mediaUrl);
+    p1.append('published', 'false');
+    p1.append('access_token', pageToken);
+    const r1 = await fetch(`${graphBase}/${fbPageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: p1.toString()
+    });
+    const d1 = await r1.json();
+    if (!r1.ok || d1.error) {
+      throw new Error(d1.error ? d1.error.message : 'Error subiendo foto de carrusel a Facebook Page');
+    }
+    attachedMedia.push({ media_fbid: d1.id });
+  }
+
+  const feedRes = await fetch(`${graphBase}/${fbPageId}/feed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: post.caption || '',
+      attached_media: attachedMedia,
+      access_token: pageToken
+    })
+  });
+  const feedData = await feedRes.json();
+  if (!feedRes.ok || feedData.error) {
+    throw new Error(feedData.error ? feedData.error.message : 'Error publicando carrusel en Facebook Page');
+  }
+
+  return {
+    fbPublishId: feedData.id,
+    label: `🎠 Carrusel (${photoSlides.length} fotos) publicado en Facebook (${pageName} • ID: ${feedData.id})`
+  };
+}
+
 // Executes the official Meta Graph API + TikTok Content Posting API v2 flow
-// Supports 4 distinct formats: 'STORY' (Solo Historia 24h), 'REEL' (Solo Reel), 'POST' (Solo Post), and 'BOTH' (Historia 24h + Reel/Post)
+// Supports 5 formats: 'POST', 'CAROUSEL', 'STORY', 'REEL', and 'BOTH'
 async function executeMetaPublishFlow(post) {
   const cfg = appState.metaConfig || {};
   const accessToken = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
-  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || '').trim();
-  const isVideoFile = isPostVideo(post);
-  const norm = normalizeCloudMedia(rawMediaUrl, isVideoFile ? 'video' : 'image');
-  const mediaUrl = norm.publicUrl || rawMediaUrl;
-  const isPublicHttp = /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
 
   const rawFormat =
     post.postFormat ||
-    (post.mediaType === 'STORIES' ? 'STORY' : post.mediaType === 'REELS' ? 'REEL' : 'POST');
+    (post.mediaType === 'CAROUSEL' || post.mediaType === 'CAROUSEL_ALBUM'
+      ? 'CAROUSEL'
+      : post.mediaType === 'STORIES'
+      ? 'STORY'
+      : post.mediaType === 'REELS'
+      ? 'REEL'
+      : 'POST');
+  const isCarousel = rawFormat === 'CAROUSEL' || isPostCarousel(post);
+  const carouselItems = isCarousel ? resolveCarouselItemsClient(post) : [];
 
-  // Modos a ejecutar según elección del usuario:
-  // - STORY -> ['STORY'] (Exclusivo Historia 24h)
-  // - REEL  -> ['REEL']  (Exclusivo Reel)
-  // - POST  -> ['POST']  (Exclusivo Post Feed)
-  // - BOTH  -> ['STORY', isVideoFile ? 'REEL' : 'POST'] (Publica en Historia 24h Y además en Reel/Post)
+  const rawMediaUrl = (post.publicMediaUrl || post.mediaUrl || carouselItems[0]?.mediaUrl || '').trim();
+  const isVideoFile = isPostVideo(post);
+  const norm = normalizeCloudMedia(rawMediaUrl, isVideoFile ? 'video' : 'image');
+  const mediaUrl = norm.publicUrl || rawMediaUrl;
+  const isPublicHttp = isCarousel
+    ? carouselItems.length >= 2 && carouselItems.every((it) => /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(it.mediaUrl))
+    : /^https?:\/\/(?!localhost|127\.0\.0\.1)/i.test(mediaUrl);
+
   const targetModes =
     rawFormat === 'BOTH'
       ? ['STORY', isVideoFile ? 'REEL' : 'POST']
@@ -1758,6 +2024,10 @@ async function executeMetaPublishFlow(post) {
     throw new Error('Falta configurar el Access Token en la pestaña "Paso a Paso Meta".');
   }
 
+  if (isCarousel && carouselItems.length < 2) {
+    throw new Error('Un Carrusel requiere mínimo 2 y máximo 10 fotos/videos con URL pública https://.');
+  }
+
   if (!isPublicHttp) {
     if (cfg.simulationFallback !== false) {
       return {
@@ -1773,44 +2043,78 @@ async function executeMetaPublishFlow(post) {
   const resultsMessages = [];
   let lastContainerId = '';
   let lastPublishId = '';
+  let igPublishId = '';
+  let fbPublishId = '';
+  let tiktokPublishId = '';
 
-  // 1. PUBLICAR EN INSTAGRAM (Solo si el usuario seleccionó Instagram)
+  // 1. PUBLICAR EN INSTAGRAM
   if (wantInstagram) {
-    for (const mode of targetModes) {
-      const igRes = await executeInstagramSinglePublish(
-        post,
-        accessToken,
-        igUserId,
-        mediaUrl,
-        isVideoFile,
-        mode
-      );
+    if (isCarousel) {
+      const igRes = await executeInstagramCarouselPublish(post, accessToken, igUserId, carouselItems);
       lastContainerId = igRes.containerId || lastContainerId;
       lastPublishId = igRes.publishId || lastPublishId;
+      igPublishId = igRes.publishId || igPublishId;
       resultsMessages.push(igRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const igRes = await executeInstagramSinglePublish(
+          post,
+          accessToken,
+          igUserId,
+          mediaUrl,
+          isVideoFile,
+          mode
+        );
+        lastContainerId = igRes.containerId || lastContainerId;
+        lastPublishId = igRes.publishId || lastPublishId;
+        if (mode !== 'STORY' || !igPublishId) {
+          igPublishId = igRes.publishId || igPublishId;
+        }
+        resultsMessages.push(igRes.label);
+      }
     }
   }
 
-  // 2. PUBLICAR EN PÁGINA DE FACEBOOK (Solo si el usuario seleccionó Facebook)
+  // 2. PUBLICAR EN PÁGINA DE FACEBOOK
   if (wantFacebook) {
-    for (const mode of targetModes) {
-      const fbRes = await executeFacebookPagePublish(post, cfg, mediaUrl, isVideoFile, mode);
+    if (isCarousel) {
+      const fbRes = await executeFacebookCarouselPublish(post, cfg, carouselItems);
       lastPublishId = fbRes.fbPublishId || lastPublishId;
+      fbPublishId = fbRes.fbPublishId || fbPublishId;
       resultsMessages.push(fbRes.label);
+    } else {
+      for (const mode of targetModes) {
+        const fbRes = await executeFacebookPagePublish(post, cfg, mediaUrl, isVideoFile, mode);
+        lastPublishId = fbRes.fbPublishId || lastPublishId;
+        fbPublishId = fbRes.fbPublishId || fbPublishId;
+        resultsMessages.push(fbRes.label);
+      }
     }
   }
 
-  // 3. PUBLICAR EN TIKTOK VÍA FILE_UPLOAD BINARIO DESDE GOOGLE DRIVE (Solo si el usuario seleccionó TikTok)
+  // 3. PUBLICAR EN TIKTOK VÍA FILE_UPLOAD BINARIO DESDE GOOGLE DRIVE
   if (wantTikTok) {
-    const ttRes = await executeTikTokPublish(post, mediaUrl, isVideoFile);
+    const firstVideoSlide = isCarousel ? carouselItems.find((it) => it.isVideo) : null;
+    if (isCarousel && !firstVideoSlide) {
+      throw new Error('TikTok requiere un video MP4; para carruseles de solo fotos desmarca TikTok.');
+    }
+    const ttRes = await executeTikTokPublish(
+      post,
+      firstVideoSlide ? firstVideoSlide.mediaUrl : mediaUrl,
+      isCarousel ? Boolean(firstVideoSlide) : isVideoFile
+    );
     lastPublishId = ttRes.publishId || lastPublishId;
+    tiktokPublishId = ttRes.publishId || tiktokPublishId;
     resultsMessages.push(ttRes.label);
   }
 
   return {
     success: true,
     containerId: lastContainerId,
-    mediaPublishId: lastPublishId,
+    mediaPublishId: igPublishId || fbPublishId || tiktokPublishId || lastPublishId,
+    igPublishId,
+    fbPublishId,
+    tiktokPublishId,
     message: resultsMessages.join(' + ')
   };
 }
@@ -1820,9 +2124,11 @@ window.publishPostNow = async function (postId) {
   if (!post || post._isPublishing) return;
 
   post._isPublishing = true;
-  const fmt = post.postFormat || (post.mediaType === 'STORIES' ? 'STORY' : 'POST');
+  const fmt = post.postFormat || (post.mediaType === 'CAROUSEL' ? 'CAROUSEL' : post.mediaType === 'STORIES' ? 'STORY' : 'POST');
   showToast(
-    fmt === 'BOTH'
+    fmt === 'CAROUSEL'
+      ? '🎠 Publicando Carrusel en tus redes (puede tardar 15-40s según la cantidad de slides)...'
+      : fmt === 'BOTH'
       ? '🔥 Publicando simultáneamente en Historia 24h y en Reel/Post (puede tardar 15-35s)...'
       : fmt === 'STORY'
       ? '⭕ Publicando exclusivamente en Historia 24h (puede tardar 10-25s si es video)...'
@@ -1835,15 +2141,21 @@ window.publishPostNow = async function (postId) {
     post.status = 'published';
     post.publishedAt = new Date().toISOString();
     post.metaPublishId = result.mediaPublishId;
+    if (result.igPublishId) post.igPublishId = result.igPublishId;
+    if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+    if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
     post.logs = post.logs || [];
     post.logs.push({ time: new Date().toISOString(), message: result.message });
-    if (!post.metrics || !post.metrics.reach) {
-      post.metrics = { reach: 350, likes: 18, comments: 4, saves: 7 };
+    if (!post.metrics) {
+      post.metrics = { reach: 0, likes: 0, comments: 0, saves: 0 };
     }
     delete post._isPublishing;
     renderAll();
     await saveStateEverywhere(false);
     showToast(`✅ ${result.message}`);
+    if (appState.metaConfig?.accessToken && appState.metaConfig?.igUserId) {
+      setTimeout(() => syncLiveMetaMetrics({ silent: true, force: true }), 4000);
+    }
   } catch (err) {
     delete post._isPublishing;
     post.status = 'failed';
@@ -1870,6 +2182,9 @@ async function runBrowserAutoScheduler() {
       post.status = 'published';
       post.publishedAt = new Date().toISOString();
       post.metaPublishId = result.mediaPublishId;
+      if (result.igPublishId) post.igPublishId = result.igPublishId;
+      if (result.fbPublishId) post.fbPublishId = result.fbPublishId;
+      if (result.tiktokPublishId) post.tiktokPublishId = result.tiktokPublishId;
       post.logs = post.logs || [];
       post.logs.push({ time: new Date().toISOString(), message: `[Auto] ${result.message}` });
       delete post._isPublishing;
@@ -1993,7 +2308,7 @@ function renderInstagramGrid() {
     });
   }
 
-  // Render 3x3 Feed Grid (Only Feed Posts & Reels)
+  // Render 3x3 Feed Grid (Posts, Carousels & Reels)
   const orderedPosts = [...feedPosts].sort(
     (a, b) => (a.gridOrder || 99) - (b.gridOrder || 99)
   );
@@ -2003,12 +2318,17 @@ function renderInstagramGrid() {
     .map(
       (p) => `
       <div class="ig-cell" draggable="true" data-post-id="${p.id}">
-        <img src="${p.mediaUrl || './icon.svg'}" referrerpolicy="no-referrer" alt="${escapeHtml(p.title)}" onerror="this.src='./icon.svg'" />
-        <span class="ig-cell-badge">${p.status === 'published' ? '✔' : '⏰'}</span>
+        <img src="${escapeHtml(getPostThumbnailUrl(p))}" referrerpolicy="no-referrer" alt="${escapeHtml(p.title)}" onerror="this.src='./icon.svg'" />
+        <span class="ig-cell-badge">${isPostCarousel(p) ? `🎠${p.carouselItems?.length || ''} ` : ''}${p.status === 'published' ? '✔' : '⏰'}</span>
       </div>
     `
     )
     .join('');
+
+  const postsCountEl = document.getElementById('igMockPostsCount');
+  if (postsCountEl && appState.metaConfig?.mediaCount !== undefined) {
+    postsCountEl.textContent = String(appState.metaConfig.mediaCount);
+  }
 
   let draggedPostId = null;
 
@@ -2056,7 +2376,7 @@ function renderInstagramGrid() {
 }
 
 // ==========================================
-// CENTRO DE MÉTRICAS E INSIGHTS
+// CENTRO DE MÉTRICAS E INSIGHTS (META API v22.0)
 // ==========================================
 function initMetricsEvents() {
   document.querySelectorAll('#metricsFilterPills .pill').forEach((pill) => {
@@ -2068,104 +2388,467 @@ function initMetricsEvents() {
     });
   });
 
-  document.getElementById('btnSyncMetaMetrics')?.addEventListener('click', syncLiveMetaMetrics);
+  document.getElementById('btnSyncMetaMetrics')?.addEventListener('click', () => {
+    syncLiveMetaMetrics({ silent: false, force: true });
+  });
 }
 
-async function syncLiveMetaMetrics() {
+function parseInsightsMetricMap(insightsJson) {
+  const map = {};
+  const list = Array.isArray(insightsJson?.data) ? insightsJson.data : [];
+  for (const row of list) {
+    if (!row?.name) continue;
+    if (row.total_value && typeof row.total_value.value === 'number') {
+      map[row.name] = row.total_value.value;
+    } else if (Array.isArray(row.values) && row.values.length > 0) {
+      const last = row.values[row.values.length - 1];
+      if (typeof last?.value === 'number') {
+        map[row.name] = last.value;
+      }
+    }
+  }
+  return map;
+}
+
+async function fetchIgMediaInsightsSafe(igItem, token, isStory) {
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  const candidateMetrics = isStory
+    ? ['reach,views,replies', 'reach']
+    : ['reach,views,saved,shares,total_interactions', 'reach,saved,shares', 'reach,saved', 'reach'];
+
+  let lastError = null;
+  for (const metricList of candidateMetrics) {
+    try {
+      const res = await fetch(
+        `${graphBase}/${igItem.id}/insights?metric=${encodeURIComponent(metricList)}&access_token=${encodeURIComponent(
+          token
+        )}`
+      );
+      const data = await res.json();
+      if (res.ok && !data.error) {
+        return { ok: true, map: parseInsightsMetricMap(data), error: null };
+      }
+      const errCode = data?.error?.code;
+      const errMsg = data?.error?.message || '';
+      // Error code 10 on brand new Stories (< 5 viewers) -> not an app permission issue
+      if (isStory && errCode === 10 && /viewer|enough/i.test(errMsg)) {
+        return { ok: true, map: { reach: 0, views: 0, replies: 0 }, error: null };
+      }
+      lastError = data?.error || { message: errMsg || `HTTP ${res.status}` };
+      // If OAuth token invalid/expired or permission missing, don't loop fallbacks unnecessarily
+      if (errCode === 190 || errCode === 200 || (errCode === 10 && /permission/i.test(errMsg))) {
+        break;
+      }
+    } catch (e) {
+      lastError = { message: e.message };
+      break;
+    }
+  }
+  return { ok: false, map: {}, error: lastError };
+}
+
+async function fetchFacebookPostMetricsSafe(fbPostId, token) {
+  if (!fbPostId || !token) return null;
+  const graphBase = 'https://graph.facebook.com/v22.0';
+  try {
+    const res = await fetch(
+      `${graphBase}/${fbPostId}?fields=likes.summary(true),comments.summary(true),shares&access_token=${encodeURIComponent(
+        token
+      )}`
+    );
+    const data = await res.json();
+    if (!res.ok || data.error) return null;
+    const likes = data.likes?.summary?.total_count ?? 0;
+    const comments = data.comments?.summary?.total_count ?? 0;
+    const shares = data.shares?.count ?? 0;
+
+    let reach = 0;
+    try {
+      const insRes = await fetch(
+        `${graphBase}/${fbPostId}/insights?metric=post_impressions_unique&access_token=${encodeURIComponent(token)}`
+      );
+      const insData = await insRes.json();
+      const map = parseInsightsMetricMap(insData);
+      if (typeof map.post_impressions_unique === 'number') {
+        reach = map.post_impressions_unique;
+      }
+    } catch (_) {}
+
+    return { likes, comments, shares, reach };
+  } catch (_) {
+    return null;
+  }
+}
+
+async function syncLiveMetaMetrics(opts = {}) {
+  const { silent = false, force = false } = typeof opts === 'boolean' ? { silent: opts } : opts || {};
+  if (isSyncingMetrics) return;
+
+  const nowMs = Date.now();
+  if (!force && nowMs - lastMetricsSyncAttemptAt < 15000) return;
+
   const btn = document.getElementById('btnSyncMetaMetrics');
   const cfg = appState.metaConfig || {};
   const token = (cfg.accessToken || '').trim();
   const igUserId = (cfg.igUserId || '').trim();
 
-  btn.disabled = true;
-  btn.textContent = '⏳ Consultando Meta Graph Insights...';
+  isSyncingMetrics = true;
+  lastMetricsSyncAttemptAt = nowMs;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Actualizando desde Meta API...';
+  }
 
   try {
+    const graphBase = 'https://graph.facebook.com/v22.0';
+    const nowIso = new Date().toISOString();
+
     if (token && igUserId) {
       // 1. Fetch Account Profile & Followers
       const accRes = await fetch(
-        `https://graph.facebook.com/v21.0/${igUserId}?fields=followers_count,follows_count,media_count,username,name&access_token=${encodeURIComponent(
+        `${graphBase}/${igUserId}?fields=followers_count,follows_count,media_count,username,name&access_token=${encodeURIComponent(
           token
         )}`
       );
       const accData = await accRes.json();
-      if (accRes.ok && !accData.error) {
-        appState.metaConfig.followersCount = accData.followers_count || appState.metaConfig.followersCount || 4820;
-        if (accData.username) appState.metaConfig.igUsername = accData.username;
+      if (!accRes.ok || accData.error) {
+        const errCode = accData?.error?.code;
+        const rawErr = accData?.error?.message || `Meta API HTTP ${accRes.status}`;
+        const isExpired = errCode === 190 || /expired|session|OAuth/i.test(rawErr);
+        const friendlyErr = isExpired
+          ? 'Tu Access Token de Meta expiró. Genera un nuevo token (o canjéalo por Token de 60 días) en "Paso a Paso Meta".'
+          : `Error de Meta Graph API: ${rawErr}`;
+
+        appState.metricsMeta = {
+          ...(appState.metricsMeta || {}),
+          source: 'error',
+          error: friendlyErr,
+          errorCode: errCode || null,
+          lastAttemptAt: nowIso
+        };
+        renderMetricsDashboard();
+        if (!silent) showToast(`❌ ${friendlyErr}`);
+        return;
       }
 
-      // 2. Fetch Recent Media & Likes/Comments from Instagram
-      const mediaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,timestamp,like_count,comments_count&limit=15&access_token=${encodeURIComponent(
-          token
-        )}`
-      );
-      const mediaData = await mediaRes.json();
-      if (mediaRes.ok && Array.isArray(mediaData.data)) {
-        mediaData.data.forEach((igItem) => {
-          const isSt = igItem.media_product_type === 'STORY' || igItem.media_type === 'STORY';
-          const isRl = igItem.media_product_type === 'REELS';
-          const existing = appState.posts.find((p) => p.metaPublishId === igItem.id || p.id === `ig-${igItem.id}`);
-          const likes = igItem.like_count ?? 0;
-          const comments = igItem.comments_count ?? 0;
-          const estimatedReach = Math.max((likes + comments) * 11, 320);
+      if (typeof accData.followers_count === 'number') {
+        appState.metaConfig.followersCount = accData.followers_count;
+      }
+      if (typeof accData.follows_count === 'number') {
+        appState.metaConfig.followsCount = accData.follows_count;
+      }
+      if (typeof accData.media_count === 'number') {
+        appState.metaConfig.mediaCount = accData.media_count;
+      }
+      if (accData.username) {
+        appState.metaConfig.igUsername = accData.username;
+      }
 
-          if (existing) {
-            existing.metrics = {
-              reach: existing.metrics?.reach || estimatedReach,
-              likes,
-              comments,
-              saves: existing.metrics?.saves || Math.round(likes * 0.25)
-            };
-          } else {
-            appState.posts.push({
-              id: `ig-${igItem.id}`,
-              metaPublishId: igItem.id,
-              title: (igItem.caption || 'Publicación de Instagram').split('\n')[0].slice(0, 48),
-              caption: igItem.caption || '',
-              mediaUrl: igItem.media_url || './icon.svg',
-              publicMediaUrl: igItem.media_url || '',
-              mediaType: isSt ? 'STORIES' : isRl ? 'REELS' : 'IMAGE',
-              postFormat: isSt ? 'STORY' : isRl ? 'REEL' : 'POST',
-              platforms: ['instagram'],
-              status: 'published',
-              scheduledAt: igItem.timestamp || new Date().toISOString(),
-              publishedAt: igItem.timestamp || new Date().toISOString(),
-              metrics: {
-                reach: estimatedReach,
-                likes,
-                comments,
-                saves: Math.round(likes * 0.22)
-              },
-              logs: [{ time: new Date().toISOString(), message: 'Sincronizado desde Instagram Graph API.' }]
+      // 2. Fetch Account-Level 7-Day Daily Reach & Views (IG User Insights v22.0)
+      let dailyReachSeries = null;
+      let accountViews7d = null;
+      let insightsWarning = '';
+
+      try {
+        const untilSec = Math.floor(Date.now() / 1000);
+        const sinceSec = untilSec - 7 * 86400;
+        const accInsRes = await fetch(
+          `${graphBase}/${igUserId}/insights?metric=reach&metric_type=time_series&period=day&since=${sinceSec}&until=${untilSec}&access_token=${encodeURIComponent(
+            token
+          )}`
+        );
+        const accInsData = await accInsRes.json();
+        if (accInsRes.ok && Array.isArray(accInsData.data)) {
+          const reachRow = accInsData.data.find((d) => d.name === 'reach');
+          if (reachRow && Array.isArray(reachRow.values) && reachRow.values.length) {
+            const weekdayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short' });
+            dailyReachSeries = reachRow.values.slice(-7).map((pt) => {
+              const dt = new Date(pt.end_time || pt.start_time || Date.now());
+              const rawDay = weekdayFmt.format(dt).replace('.', '');
+              const label = rawDay.charAt(0).toUpperCase() + rawDay.slice(1, 3);
+              return {
+                date: pt.end_time || pt.start_time,
+                label,
+                reach: typeof pt.value === 'number' ? pt.value : 0
+              };
             });
           }
-        });
+        } else if (accInsData?.error) {
+          insightsWarning = accInsData.error.message || '';
+        }
+
+        const viewsRes = await fetch(
+          `${graphBase}/${igUserId}/insights?metric=views&metric_type=total_value&period=day&since=${sinceSec}&until=${untilSec}&access_token=${encodeURIComponent(
+            token
+          )}`
+        );
+        const viewsData = await viewsRes.json();
+        const vMap = parseInsightsMetricMap(viewsData);
+        if (typeof vMap.views === 'number') {
+          accountViews7d = vMap.views;
+        }
+      } catch (_) {}
+
+      // 3. Fetch Recent Media (Feed, Reels, Carousels) + Active 24h Stories
+      const mediaUrl = `${graphBase}/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count,children{id,media_type,media_url,thumbnail_url}&limit=25&access_token=${encodeURIComponent(
+        token
+      )}`;
+      const mediaRes = await fetch(mediaUrl);
+      const mediaData = await mediaRes.json();
+      if (!mediaRes.ok || mediaData.error) {
+        const msg = mediaData?.error?.message || `Error leyendo publicaciones (${mediaRes.status})`;
+        appState.metricsMeta = {
+          ...(appState.metricsMeta || {}),
+          source: 'error',
+          error: msg,
+          lastAttemptAt: nowIso
+        };
+        renderMetricsDashboard();
+        if (!silent) showToast(`❌ ${msg}`);
+        return;
       }
+
+      const feedAndReelItems = Array.isArray(mediaData.data) ? mediaData.data : [];
+      let activeStoryItems = [];
+      try {
+        const stRes = await fetch(
+          `${graphBase}/${igUserId}/stories?fields=id,caption,media_type,media_url,thumbnail_url,timestamp&limit=15&access_token=${encodeURIComponent(
+            token
+          )}`
+        );
+        const stData = await stRes.json();
+        if (stRes.ok && Array.isArray(stData.data)) {
+          activeStoryItems = stData.data.map((s) => ({ ...s, media_product_type: 'STORY' }));
+        }
+      } catch (_) {}
+
+      const allIgItems = [...activeStoryItems, ...feedAndReelItems];
+      const topForInsights = allIgItems.slice(0, 20);
+      const insightsResults = new Map();
+      let insightsPermissionDenied = false;
+
+      // Batch per-media insights fetches (concurrency = 5)
+      for (let i = 0; i < topForInsights.length; i += 5) {
+        const chunk = topForInsights.slice(i, i + 5);
+        const batchOut = await Promise.all(
+          chunk.map(async (igItem) => {
+            const isSt = igItem.media_product_type === 'STORY' || igItem.media_type === 'STORY';
+            const res = await fetchIgMediaInsightsSafe(igItem, token, isSt);
+            if (!res.ok && res.error && (res.error.code === 200 || res.error.code === 10)) {
+              insightsPermissionDenied = true;
+              if (!insightsWarning) insightsWarning = res.error.message;
+            }
+            return [igItem.id, res];
+          })
+        );
+        batchOut.forEach(([id, res]) => insightsResults.set(id, res));
+      }
+
+      let syncedCount = 0;
+      const normalizeSnippet = (txt) =>
+        String(txt || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 48)
+          .toLowerCase();
+
+      allIgItems.forEach((igItem) => {
+        const isSt = igItem.media_product_type === 'STORY' || igItem.media_type === 'STORY';
+        const isRl = igItem.media_product_type === 'REELS';
+        const isCar = igItem.media_type === 'CAROUSEL_ALBUM';
+        const likes = igItem.like_count ?? 0;
+        const commentsFromField = igItem.comments_count ?? 0;
+
+        const insRes = insightsResults.get(igItem.id);
+        const mMap = insRes?.ok ? insRes.map : {};
+        const reach = typeof mMap.reach === 'number' ? mMap.reach : 0;
+        const views = typeof mMap.views === 'number' ? mMap.views : reach;
+        const saves = typeof mMap.saved === 'number' ? mMap.saved : 0;
+        const shares = typeof mMap.shares === 'number' ? mMap.shares : 0;
+        const replies = typeof mMap.replies === 'number' ? mMap.replies : null;
+        const comments = replies !== null ? replies : commentsFromField;
+
+        const igSnippet = normalizeSnippet(igItem.caption);
+        const igTimeMs = igItem.timestamp ? new Date(igItem.timestamp).getTime() : 0;
+
+        const existing = appState.posts.find((p) => {
+          if (p.igPublishId === igItem.id || p.metaPublishId === igItem.id || p.id === `ig-${igItem.id}`) {
+            return true;
+          }
+          if (
+            p.status === 'published' &&
+            !p.igPublishId &&
+            igSnippet &&
+            normalizeSnippet(p.caption) === igSnippet &&
+            igTimeMs &&
+            p.publishedAt &&
+            Math.abs(new Date(p.publishedAt).getTime() - igTimeMs) < 15 * 60 * 1000
+          ) {
+            return true;
+          }
+          return false;
+        });
+
+        const carouselChildren =
+          isCar && Array.isArray(igItem.children?.data)
+            ? igItem.children.data.map((ch, idx) => ({
+                id: ch.id || `slide-${idx}`,
+                title: `Slide ${idx + 1}`,
+                url: ch.thumbnail_url || ch.media_url || './icon.svg',
+                publicUrl: ch.media_url || ch.thumbnail_url || '',
+                type: ch.media_type === 'VIDEO' ? 'video' : 'image'
+              }))
+            : null;
+
+        const thumbOrMedia =
+          igItem.thumbnail_url ||
+          igItem.media_url ||
+          carouselChildren?.[0]?.url ||
+          './icon.svg';
+
+        const nextMetrics = {
+          reach,
+          views,
+          likes,
+          comments,
+          saves,
+          shares,
+          source: 'meta_live',
+          syncedAt: nowIso
+        };
+
+        if (existing) {
+          existing.igPublishId = igItem.id;
+          if (!existing.metaPublishId || String(existing.metaPublishId).startsWith('SIM_')) {
+            existing.metaPublishId = igItem.id;
+          }
+          existing.status = 'published';
+          if (igItem.permalink) existing.permalink = igItem.permalink;
+          if (carouselChildren && !Array.isArray(existing.carouselItems)) {
+            existing.carouselItems = carouselChildren;
+            existing.postFormat = 'CAROUSEL';
+            existing.mediaType = 'CAROUSEL';
+          }
+          existing.metrics = nextMetrics;
+        } else {
+          appState.posts.push({
+            id: `ig-${igItem.id}`,
+            igPublishId: igItem.id,
+            metaPublishId: igItem.id,
+            title:
+              (igItem.caption || (isSt ? 'Historia de Instagram' : isCar ? 'Carrusel de Instagram' : 'Publicación de Instagram'))
+                .split('\n')[0]
+                .slice(0, 52),
+            caption: igItem.caption || '',
+            mediaUrl: thumbOrMedia,
+            publicMediaUrl: igItem.media_url || thumbOrMedia,
+            mediaType: isCar ? 'CAROUSEL' : isSt ? 'STORIES' : isRl ? 'REELS' : 'IMAGE',
+            postFormat: isCar ? 'CAROUSEL' : isSt ? 'STORY' : isRl ? 'REEL' : 'POST',
+            carouselItems: carouselChildren || undefined,
+            permalink: igItem.permalink || '',
+            platforms: ['instagram'],
+            status: 'published',
+            scheduledAt: igItem.timestamp || nowIso,
+            publishedAt: igItem.timestamp || nowIso,
+            metrics: nextMetrics,
+            logs: [{ time: nowIso, message: 'Sincronizado en vivo desde Instagram Graph API.' }]
+          });
+        }
+        syncedCount++;
+      });
+
+      // 4. Optional enrichment for Facebook-only published posts
+      const fbToken = cfg.fbPageAccessToken || token;
+      const fbOnlyPosts = appState.posts
+        .filter((p) => p.status === 'published' && p.fbPublishId && !p.igPublishId)
+        .slice(0, 8);
+      if (fbToken && fbOnlyPosts.length) {
+        await Promise.all(
+          fbOnlyPosts.map(async (fp) => {
+            const fbM = await fetchFacebookPostMetricsSafe(fp.fbPublishId, fbToken);
+            if (fbM) {
+              fp.metrics = {
+                ...(fp.metrics || {}),
+                reach: fbM.reach || fp.metrics?.reach || 0,
+                likes: fbM.likes,
+                comments: fbM.comments,
+                shares: fbM.shares,
+                saves: fp.metrics?.saves || 0,
+                source: 'meta_live',
+                syncedAt: nowIso
+              };
+            }
+          })
+        );
+      }
+
+      appState.metricsMeta = {
+        source: 'meta_live',
+        updatedAt: nowIso,
+        syncedMediaCount: syncedCount,
+        dailyReach: dailyReachSeries,
+        accountViews7d,
+        insightsPermissionDenied,
+        insightsWarning: insightsWarning || '',
+        error: ''
+      };
 
       renderAll();
       await saveStateEverywhere(false);
-      showToast('✅ ¡Métricas reales sincronizadas desde tu cuenta de Instagram Business!');
+      if (!silent) {
+        if (insightsPermissionDenied) {
+          showToast(
+            `✅ ${syncedCount} publicaciones y likes/comentarios sincronizados. Nota: falta permiso "instagram_manage_insights" para alcance/guardados.`
+          );
+        } else {
+          showToast(
+            `✅ Métricas reales actualizadas (${syncedCount} publicaciones • ${(appState.metaConfig.followersCount ?? 0).toLocaleString('es-ES')} seguidores).`
+          );
+        }
+      }
     } else {
-      // Simulate updated insights for local/demo preview
-      appState.posts.forEach((p) => {
-        const m = p.metrics || { reach: 1500, likes: 120, comments: 20, saves: 40 };
-        p.metrics = {
-          reach: m.reach + Math.floor(Math.random() * 180 + 40),
-          likes: m.likes + Math.floor(Math.random() * 22 + 5),
-          comments: m.comments + Math.floor(Math.random() * 6 + 1),
-          saves: m.saves + Math.floor(Math.random() * 10 + 2)
-        };
-      });
+      // Simulate updated insights for local/demo preview when no Meta credentials configured
+      appState.posts
+        .filter((p) => p.status === 'published')
+        .forEach((p) => {
+          const m = p.metrics || { reach: 800, likes: 60, comments: 8, saves: 15 };
+          p.metrics = {
+            ...m,
+            reach: (m.reach || 0) + Math.floor(Math.random() * 140 + 30),
+            likes: (m.likes || 0) + Math.floor(Math.random() * 18 + 3),
+            comments: (m.comments || 0) + Math.floor(Math.random() * 5 + 1),
+            saves: (m.saves || 0) + Math.floor(Math.random() * 8 + 1),
+            source: 'demo',
+            syncedAt: nowIso
+          };
+        });
+      appState.metricsMeta = {
+        source: 'demo',
+        updatedAt: nowIso,
+        error: ''
+      };
       renderAll();
       await saveStateEverywhere(false);
-      showToast('📊 Métricas actualizadas (Modo Demo — conecta tu Token en Meta API para métricas en vivo)');
+      if (!silent) {
+        showToast('📊 Métricas demo actualizadas (conecta tu Token en Paso a Paso Meta para datos reales)');
+      }
     }
   } catch (err) {
-    showToast(`❌ Error sincronizando métricas: ${err.message}`);
+    appState.metricsMeta = {
+      ...(appState.metricsMeta || {}),
+      source: 'error',
+      error: err.message,
+      lastAttemptAt: new Date().toISOString()
+    };
+    renderMetricsDashboard();
+    if (!silent) showToast(`❌ Error sincronizando métricas: ${err.message}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '🔄 Sincronizar con Meta Insights API';
+    isSyncingMetrics = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Actualizar Métricas en Vivo';
+    }
   }
 }
 
@@ -2173,78 +2856,198 @@ function renderMetricsDashboard() {
   const tableBody = document.getElementById('metricsTableBody');
   const chartContainer = document.getElementById('weeklyReachChart');
   const breakdownContainer = document.getElementById('formatBreakdownContainer');
+  const syncMetaEl = document.getElementById('metricsSyncMeta');
+  const alertBannerEl = document.getElementById('metricsAlertBanner');
   if (!tableBody) return;
 
-  const followers = appState.metaConfig?.followersCount || 4820;
-  let totalReach = 0;
+  const metaInfo = appState.metricsMeta || {};
+  const hasToken = Boolean((appState.metaConfig?.accessToken || '').trim() && (appState.metaConfig?.igUserId || '').trim());
+
+  if (syncMetaEl) {
+    if (metaInfo.source === 'error' && metaInfo.error) {
+      syncMetaEl.innerHTML = `🔴 <strong>Error de sincronización:</strong> ${escapeHtml(metaInfo.error)}`;
+    } else if (metaInfo.source === 'meta_live' && metaInfo.updatedAt) {
+      const updatedLabel = new Date(metaInfo.updatedAt).toLocaleString('es-ES', {
+        dateStyle: 'short',
+        timeStyle: 'medium'
+      });
+      syncMetaEl.innerHTML = `🟢 <strong>En vivo desde Meta API v22.0</strong> • Última actualización: <b>${updatedLabel}</b> (${metaInfo.syncedMediaCount || 0} medios)`;
+    } else if (hasToken) {
+      syncMetaEl.innerHTML = `🟡 Listo para sincronizar con <b>@${escapeHtml((appState.metaConfig?.igUsername || 'Instagram').replace(/^@/, ''))}</b>`;
+    } else {
+      syncMetaEl.innerHTML = `⚪ Modo Demo (sin Token de Meta conectado en "Paso a Paso Meta")`;
+    }
+  }
+
+  if (alertBannerEl) {
+    if (metaInfo.source === 'error' && metaInfo.error) {
+      alertBannerEl.className = 'metrics-alert-banner error';
+      alertBannerEl.innerHTML = `⚠️ <strong>No se pudieron actualizar las métricas en vivo:</strong> ${escapeHtml(
+        metaInfo.error
+      )} <button type="button" class="btn-outline btn-sm" style="margin-left:8px;" onclick="switchTab('meta-wizard')">Ir a Paso a Paso Meta →</button>`;
+    } else if (metaInfo.insightsPermissionDenied || metaInfo.insightsWarning) {
+      alertBannerEl.className = 'metrics-alert-banner';
+      alertBannerEl.innerHTML = `ℹ️ <strong>Seguidores, Likes y Comentarios actualizados en vivo.</strong> Para que Meta también entregue <em>Alcance diario</em> y <em>Guardados</em>, asegúrate de marcar el permiso <code>instagram_manage_insights</code> al generar tu Token en Graph API Explorer. <span style="opacity:0.8;">(${escapeHtml(
+        metaInfo.insightsWarning || ''
+      )})</span>`;
+    } else {
+      alertBannerEl.className = 'metrics-alert-banner hidden';
+      alertBannerEl.innerHTML = '';
+    }
+  }
+
+  const followers = appState.metaConfig?.followersCount ?? 0;
+
+  // Aggregate real KPI metrics from published or meta_live-synced posts
+  const metricEligiblePosts = appState.posts.filter(
+    (p) => p.status === 'published' || p.metrics?.source === 'meta_live'
+  );
+
+  let totalPostReach = 0;
   let totalLikes = 0;
   let totalComments = 0;
   let totalSaves = 0;
+  let totalShares = 0;
 
   let postReach = 0, postCount = 0;
+  let carouselReach = 0, carouselCount = 0;
   let storyReach = 0, storyCount = 0;
   let reelReach = 0, reelCount = 0;
 
-  appState.posts.forEach((p, idx) => {
-    const m = p.metrics || {
-      reach: 1200 + idx * 450,
-      likes: 95 + idx * 35,
-      comments: 14 + idx * 6,
-      saves: 30 + idx * 12
-    };
-    p.metrics = m;
-    totalReach += m.reach || 0;
-    totalLikes += m.likes || 0;
-    totalComments += m.comments || 0;
-    totalSaves += m.saves || 0;
+  metricEligiblePosts.forEach((p) => {
+    const m = p.metrics || {};
+    const r = Number(m.reach) || 0;
+    const v = Number(m.views) || r;
+    totalPostReach += r;
+    totalLikes += Number(m.likes) || 0;
+    totalComments += Number(m.comments) || 0;
+    totalSaves += Number(m.saves) || 0;
+    totalShares += Number(m.shares) || 0;
 
-    if (isPostStory(p)) {
-      storyReach += m.reach || 0;
+    if (isPostCarousel(p)) {
+      carouselReach += r || v;
+      carouselCount++;
+    } else if (isPostStory(p)) {
+      storyReach += r || v;
       storyCount++;
     } else if (p.postFormat === 'REEL' || p.mediaType === 'REELS') {
-      reelReach += m.reach || 0;
+      reelReach += r || v;
       reelCount++;
     } else {
-      postReach += m.reach || 0;
+      postReach += r || v;
       postCount++;
     }
   });
 
-  const totalInteractions = totalLikes + totalComments + totalSaves;
-  const erPct = totalReach > 0 ? ((totalInteractions / totalReach) * 100).toFixed(1) : '6.4';
+  // If account-level 7-day reach exists and exceeds per-post reach sum (e.g. missing older posts or story decay), reflect truthfully
+  const dailySeries = Array.isArray(metaInfo.dailyReach) ? metaInfo.dailyReach : null;
+  const dailyReachSum = dailySeries ? dailySeries.reduce((acc, d) => acc + (d.reach || 0), 0) : 0;
+  const displayTotalReach = totalPostReach > 0 ? totalPostReach : dailyReachSum;
 
-  document.getElementById('kpiFollowersVal').textContent = followers.toLocaleString('es-ES');
-  document.getElementById('kpiReachVal').textContent = totalReach.toLocaleString('es-ES');
+  const totalInteractions = totalLikes + totalComments + totalSaves + totalShares;
+  const erNum = displayTotalReach > 0 ? (totalInteractions / displayTotalReach) * 100 : 0;
+  const erPct = erNum.toFixed(1);
+
+  document.getElementById('kpiFollowersVal').textContent = Number(followers).toLocaleString('es-ES');
+  document.getElementById('kpiReachVal').textContent = displayTotalReach.toLocaleString('es-ES');
   document.getElementById('kpiInteractionsVal').textContent = totalInteractions.toLocaleString('es-ES');
   document.getElementById('kpiErVal').textContent = `${erPct}%`;
 
+  const setTrendBadge = (id, text, cls = 'neutral') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = `kpi-trend ${cls}`;
+  };
+
+  setTrendBadge(
+    'kpiFollowersTrend',
+    appState.metaConfig?.igUsername ? `@${appState.metaConfig.igUsername.replace(/^@/, '')}` : 'Meta IG',
+    metaInfo.source === 'meta_live' ? 'up' : 'neutral'
+  );
+
+  if (dailySeries && dailySeries.length >= 4) {
+    const mid = Math.floor(dailySeries.length / 2);
+    const prevHalf = dailySeries.slice(0, mid).reduce((s, d) => s + (d.reach || 0), 0);
+    const recentHalf = dailySeries.slice(mid).reduce((s, d) => s + (d.reach || 0), 0);
+    if (prevHalf > 0) {
+      const pctDiff = Math.round(((recentHalf - prevHalf) / prevHalf) * 100);
+      setTrendBadge('kpiReachTrend', `${pctDiff >= 0 ? '+' : ''}${pctDiff}% 7d`, pctDiff >= 0 ? 'up' : 'down');
+    } else {
+      setTrendBadge('kpiReachTrend', `${dailyReachSum.toLocaleString('es-ES')} (7d)`, 'up');
+    }
+  } else {
+    setTrendBadge(
+      'kpiReachTrend',
+      `${metricEligiblePosts.length} pub.`,
+      displayTotalReach > 0 ? 'up' : 'neutral'
+    );
+  }
+
+  setTrendBadge(
+    'kpiEngagementTrend',
+    `${totalLikes}❤️ ${totalComments}💬`,
+    totalInteractions > 0 ? 'up' : 'neutral'
+  );
+  setTrendBadge(
+    'kpiErTrend',
+    erNum >= 5 ? 'Excelente' : erNum >= 2 ? 'Saludable' : displayTotalReach > 0 ? 'En crecimiento' : 'Sin alcance',
+    erNum >= 2 ? 'up' : 'neutral'
+  );
+
   const mockFollowers = document.getElementById('igMockFollowersCount');
-  if (mockFollowers) mockFollowers.textContent = followers >= 1000 ? `${(followers / 1000).toFixed(1)}K` : String(followers);
+  if (mockFollowers) {
+    mockFollowers.textContent = followers >= 1000 ? `${(followers / 1000).toFixed(1)}K` : String(followers);
+  }
 
-  // Render 7-day stacked bar chart (Posts vs Stories)
+  // Render Dynamic 7-Day Bar Chart (Real Instagram Insights time_series OR bucketed last 7 days from published posts)
+  const chartSourceBadge = document.getElementById('weeklyChartSourceBadge');
   if (chartContainer) {
-    const days = [
-      { label: 'Lun', post: 1850, story: 920 },
-      { label: 'Mar', post: 1420, story: 1150 },
-      { label: 'Mié', post: 2480, story: 1340 },
-      { label: 'Jue', post: 1960, story: 1080 },
-      { label: 'Vie', post: 2790, story: 1620 },
-      { label: 'Sáb', post: 2150, story: 1490 },
-      { label: 'Dom', post: 2300, story: 1380 }
-    ];
-    const maxDay = Math.max(...days.map((d) => d.post + d.story), 1);
+    let chartDays = [];
+    if (dailySeries && dailySeries.length > 0) {
+      chartDays = dailySeries.map((d) => ({
+        label: d.label,
+        primary: d.reach || 0,
+        secondary: 0
+      }));
+      if (chartSourceBadge) chartSourceBadge.textContent = 'Instagram Insights Real (7d)';
+    } else {
+      const weekdayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short' });
+      for (let offset = 6; offset >= 0; offset--) {
+        const dt = new Date(Date.now() - offset * 86400 * 1000);
+        const dayStr = dt.toDateString();
+        const rawLabel = weekdayFmt.format(dt).replace('.', '');
+        const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1, 3);
+        let primary = 0;
+        let secondary = 0;
+        metricEligiblePosts.forEach((p) => {
+          const pDate = new Date(p.publishedAt || p.scheduledAt || p.createdAt);
+          if (pDate.toDateString() === dayStr) {
+            const val = p.metrics?.reach || (p.metrics?.likes || 0) * 10;
+            if (isPostStory(p)) secondary += val;
+            else primary += val;
+          }
+        });
+        chartDays.push({ label, primary, secondary });
+      }
+      if (chartSourceBadge) {
+        chartSourceBadge.textContent = metaInfo.source === 'meta_live' ? 'Posts Publicados (7d)' : 'Actividad 7 días';
+      }
+    }
 
-    chartContainer.innerHTML = days
+    const maxDay = Math.max(...chartDays.map((d) => d.primary + d.secondary), 1);
+    chartContainer.innerHTML = chartDays
       .map((d) => {
-        const total = d.post + d.story;
-        const postH = Math.round((d.post / maxDay) * 135);
-        const storyH = Math.round((d.story / maxDay) * 135);
+        const total = d.primary + d.secondary;
+        const pH = total > 0 ? Math.max(Math.round((d.primary / maxDay) * 135), d.primary > 0 ? 8 : 0) : 0;
+        const sH = total > 0 ? Math.max(Math.round((d.secondary / maxDay) * 135), d.secondary > 0 ? 8 : 0) : 0;
+        const fmtVal = total >= 1000 ? `${(total / 1000).toFixed(1)}k` : String(total);
         return `
           <div class="chart-col">
-            <span class="chart-val">${(total / 1000).toFixed(1)}k</span>
-            <div class="chart-bar-wrap" title="Posts: ${d.post} • Historias: ${d.story}">
-              <div class="chart-bar-story" style="height:${storyH}px;"></div>
-              <div class="chart-bar-post" style="height:${postH}px;"></div>
+            <span class="chart-val">${fmtVal}</span>
+            <div class="chart-bar-wrap" title="Feed/Reels/Carrusel: ${d.primary} • Historias: ${d.secondary}">
+              <div class="chart-bar-story" style="height:${sH}px;"></div>
+              <div class="chart-bar-post" style="height:${pH}px;"></div>
             </div>
             <span class="chart-day">${d.label}</span>
           </div>
@@ -2253,76 +3056,141 @@ function renderMetricsDashboard() {
       .join('');
   }
 
-  // Render Format Breakdown (Posts vs Stories vs Reels)
+  // Render Real Format Breakdown (Post vs Carousel vs Story vs Reel)
   if (breakdownContainer) {
-    const safeTotal = Math.max(totalReach, 1);
-    const postPct = Math.round((postReach / safeTotal) * 100) || 55;
-    const storyPct = Math.round((storyReach / safeTotal) * 100) || 30;
-    const reelPct = Math.max(100 - postPct - storyPct, 12);
+    const combinedFormatReach = postReach + carouselReach + storyReach + reelReach;
+    const safeTotal = Math.max(combinedFormatReach, 1);
+    const pct = (val) => (combinedFormatReach > 0 ? Math.round((val / safeTotal) * 100) : 0);
 
     breakdownContainer.innerHTML = `
       <div class="format-stat-row">
         <div class="format-stat-head">
-          <span>📸 <strong>Posts de Feed</strong> (${postCount} publicados/programados)</span>
-          <strong>${postReach.toLocaleString('es-ES')} alcance (${postPct}%)</strong>
+          <span>📸 <strong>Posts de Feed</strong> (${postCount} publicados)</span>
+          <strong>${postReach.toLocaleString('es-ES')} alcance (${pct(postReach)}%)</strong>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" style="width:${postPct}%;background:linear-gradient(90deg,#6366f1,#818cf8);"></div>
+          <div class="progress-fill" style="width:${pct(postReach)}%;background:linear-gradient(90deg,#6366f1,#818cf8);"></div>
         </div>
       </div>
 
       <div class="format-stat-row">
         <div class="format-stat-head">
-          <span>⭕ <strong>Historias 24h (Stories)</strong> (${storyCount} activas/programadas)</span>
-          <strong>${storyReach.toLocaleString('es-ES')} vistas (${storyPct}%)</strong>
+          <span>🎠 <strong>Carruseles</strong> (${carouselCount} publicados)</span>
+          <strong>${carouselReach.toLocaleString('es-ES')} alcance (${pct(carouselReach)}%)</strong>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" style="width:${Math.max(storyPct, 18)}%;background:linear-gradient(90deg,#f59e0b,#ec4899);"></div>
+          <div class="progress-fill" style="width:${pct(carouselReach)}%;background:linear-gradient(90deg,#06b6d4,#38bdf8);"></div>
+        </div>
+      </div>
+
+      <div class="format-stat-row">
+        <div class="format-stat-head">
+          <span>⭕ <strong>Historias 24h (Stories)</strong> (${storyCount} activas)</span>
+          <strong>${storyReach.toLocaleString('es-ES')} vistas (${pct(storyReach)}%)</strong>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${pct(storyReach)}%;background:linear-gradient(90deg,#f59e0b,#ec4899);"></div>
         </div>
       </div>
 
       <div class="format-stat-row">
         <div class="format-stat-head">
           <span>🎬 <strong>Reels Verticales</strong> (${reelCount} videos)</span>
-          <strong>${(reelReach || 1680).toLocaleString('es-ES')} reproducciones (${reelPct}%)</strong>
+          <strong>${reelReach.toLocaleString('es-ES')} alcance (${pct(reelReach)}%)</strong>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" style="width:${reelPct}%;background:linear-gradient(90deg,#10b981,#34d399);"></div>
+          <div class="progress-fill" style="width:${pct(reelReach)}%;background:linear-gradient(90deg,#10b981,#34d399);"></div>
         </div>
       </div>
     `;
   }
 
-  // Render Metrics Table
-  const filteredPosts = appState.posts.filter((p) => {
-    if (currentMetricsFilter === 'all') return true;
-    if (currentMetricsFilter === 'STORY') return isPostStory(p);
-    return !isPostStory(p);
-  });
+  // Compute Best Performing Hours / Days from Published Posts
+  const bestTimesEl = document.getElementById('bestTimesChips');
+  if (bestTimesEl) {
+    const scored = metricEligiblePosts
+      .map((p) => {
+        const dt = new Date(p.publishedAt || p.scheduledAt || p.createdAt);
+        const m = p.metrics || {};
+        const score = (m.reach || 0) + ((m.likes || 0) + (m.comments || 0) + (m.saves || 0)) * 12;
+        return { p, dt, score };
+      })
+      .filter((x) => !Number.isNaN(x.dt.getTime()) && x.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length > 0) {
+      const seenSlots = new Set();
+      const chips = [];
+      const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short' });
+      for (const item of scored) {
+        const dStr = dayFmt.format(item.dt).replace('.', '');
+        const hStr = item.dt.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        const slotKey = `${dStr}-${item.dt.getHours()}`;
+        if (seenSlots.has(slotKey)) continue;
+        seenSlots.add(slotKey);
+        const icon = isPostCarousel(item.p) ? '🎠' : isPostStory(item.p) ? '⭕' : item.p.postFormat === 'REEL' ? '🎬' : '🔥';
+        chips.push(`<span class="time-chip">${icon} ${dStr} • ${hStr} hrs (${item.p.metrics?.likes || 0}❤️)</span>`);
+        if (chips.length >= 3) break;
+      }
+      bestTimesEl.innerHTML = chips.join('');
+    } else {
+      bestTimesEl.innerHTML = `<span class="time-chip">📊 Publica o sincroniza más posts para detectar tus mejores horas automáticamente</span>`;
+    }
+  }
+
+  // Render Metrics Table (Published first, ordered newest -> oldest)
+  const filteredPosts = [...appState.posts]
+    .filter((p) => {
+      if (currentMetricsFilter === 'all') return true;
+      if (currentMetricsFilter === 'CAROUSEL') return isPostCarousel(p);
+      if (currentMetricsFilter === 'STORY') return isPostStory(p);
+      return !isPostStory(p) && !isPostCarousel(p);
+    })
+    .sort((a, b) => {
+      const aPub = a.status === 'published' ? 1 : 0;
+      const bPub = b.status === 'published' ? 1 : 0;
+      if (aPub !== bPub) return bPub - aPub;
+      return new Date(b.publishedAt || b.scheduledAt || b.createdAt || 0) - new Date(a.publishedAt || a.scheduledAt || a.createdAt || 0);
+    });
+
+  if (!filteredPosts.length) {
+    tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:18px;">No hay publicaciones en este filtro.</td></tr>`;
+    return;
+  }
 
   tableBody.innerHTML = filteredPosts
     .map((p) => {
-      const m = p.metrics || { reach: 1200, likes: 90, comments: 14, saves: 28 };
-      const interactions = (m.likes || 0) + (m.comments || 0) + (m.saves || 0);
-      const itemEr = m.reach > 0 ? ((interactions / m.reach) * 100).toFixed(1) : '5.8';
+      const m = p.metrics || {};
+      const isPub = p.status === 'published' || m.source === 'meta_live';
+      const reachVal = isPub ? Number(m.reach) || 0 : 0;
+      const likesVal = isPub ? Number(m.likes) || 0 : 0;
+      const commentsVal = isPub ? Number(m.comments) || 0 : 0;
+      const savesVal = isPub ? Number(m.saves) || 0 : 0;
+      const sharesVal = isPub ? Number(m.shares) || 0 : 0;
+      const interactions = likesVal + commentsVal + savesVal + sharesVal;
+      const itemEr = reachVal > 0 ? ((interactions / reachVal) * 100).toFixed(1) : '0.0';
+      const statusText = p.status === 'published' ? 'Publicado' : p.status === 'draft' ? 'Borrador' : 'Programado';
+      const liveBadge = m.source === 'meta_live' ? ' • Live' : '';
+      const thumbUrl = getPostThumbnailUrl(p);
+
       return `
         <tr>
           <td data-label="Publicación">
             <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-              <img src="${p.mediaUrl || './icon.svg'}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;" />
+              <img src="${escapeHtml(thumbUrl)}" referrerpolicy="no-referrer" onerror="this.src='./icon.svg'" style="width:38px;height:38px;border-radius:6px;object-fit:cover;flex-shrink:0;" />
               <div style="min-width:0;flex:1;overflow-wrap:anywhere;">
                 <strong>${escapeHtml(p.title)}</strong>
-                <div style="font-size:0.72rem;color:var(--text-muted);">${new Date(p.scheduledAt || p.createdAt).toLocaleDateString('es-ES')}</div>
+                <div style="font-size:0.72rem;color:var(--text-muted);">${new Date(p.publishedAt || p.scheduledAt || p.createdAt).toLocaleDateString('es-ES')}${liveBadge}</div>
               </div>
             </div>
           </td>
           <td data-label="Formato">${getPostFormatBadge(p)}</td>
-          <td data-label="Estado"><span class="status-badge ${p.status}">${p.status === 'published' ? 'Publicado' : 'Programado'}</span></td>
-          <td data-label="👁️ Alcance"><strong>${(m.reach || 0).toLocaleString('es-ES')}</strong></td>
-          <td data-label="❤️ Likes">❤️ ${(m.likes || 0).toLocaleString('es-ES')}</td>
-          <td data-label="💬 Comentarios">💬 ${(m.comments || 0).toLocaleString('es-ES')}</td>
-          <td data-label="🔖 Guardados">🔖 ${(m.saves || 0).toLocaleString('es-ES')}</td>
-          <td data-label="🔥 Engagement"><span class="kpi-trend up">${itemEr}%</span></td>
+          <td data-label="Estado"><span class="status-badge ${p.status}">${statusText}</span></td>
+          <td data-label="👁️ Alcance"><strong>${isPub ? reachVal.toLocaleString('es-ES') : '—'}</strong></td>
+          <td data-label="❤️ Likes">❤️ ${isPub ? likesVal.toLocaleString('es-ES') : '—'}</td>
+          <td data-label="💬 Comentarios">💬 ${isPub ? commentsVal.toLocaleString('es-ES') : '—'}</td>
+          <td data-label="🔖 Guardados">🔖 ${isPub ? savesVal.toLocaleString('es-ES') : '—'}${sharesVal > 0 ? ` <small style="color:var(--text-muted);">(+${sharesVal} comp.)</small>` : ''}</td>
+          <td data-label="🔥 Engagement"><span class="kpi-trend ${interactions > 0 ? 'up' : 'neutral'}">${isPub ? `${itemEr}%` : '—'}</span></td>
         </tr>
       `;
     })
@@ -2484,6 +3352,9 @@ function renderMediaGallery() {
             <button class="btn-primary btn-sm" style="flex:1;" onclick="openComposerModal({ mediaId: '${m.id}', defaultFormat: 'POST' })" title="Publicar solo en el Feed">
               📸 Post
             </button>
+            <button class="btn-secondary btn-sm" style="flex:1;" onclick="openComposerModal({ mediaId: '${m.id}', defaultFormat: 'CAROUSEL' })" title="Iniciar Carrusel de varias fotos/videos">
+              🎠 Carrusel
+            </button>
             <button class="btn-story-sm" style="flex:1;" onclick="openComposerModal({ mediaId: '${m.id}', defaultFormat: 'STORY' })" title="Publicar exclusivamente en Historia 24h">
               ⭕ Historia
             </button>
@@ -2569,6 +3440,9 @@ function renderAiOptions(data) {
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn-primary btn-sm" onclick="useAiCopyInComposer(${idx}, 'POST')">
             📸 Usar en Nuevo Post
+          </button>
+          <button class="btn-secondary btn-sm" onclick="useAiCopyInComposer(${idx}, 'CAROUSEL')">
+            🎠 Usar en Carrusel
           </button>
           <button class="btn-story-sm" onclick="useAiCopyInComposer(${idx}, 'STORY')">
             ⭕ Usar en Nueva Historia
@@ -2852,7 +3726,7 @@ function initMetaWizardEvents() {
 
       renderAll();
       await saveStateEverywhere(true);
-      syncLiveMetaMetrics();
+      syncLiveMetaMetrics({ silent: true, force: true });
     } catch (err) {
       feedback.classList.add('err');
       feedback.textContent = `❌ Error al conectar con Meta: ${err.message}`;
@@ -3432,8 +4306,191 @@ function renderTikTokWizardState() {
 }
 
 // ==========================================
-// POST & STORY COMPOSER MODAL
+// POST, CAROUSEL & STORY COMPOSER MODAL
 // ==========================================
+function addCarouselSlideToComposer(rawSlide) {
+  if (composerCarouselSlides.length >= 10) {
+    showToast('⚠️ Instagram permite máximo 10 diapositivas por Carrusel.');
+    return;
+  }
+  const type = rawSlide.type === 'video' || rawSlide.format === 'MP4' ? 'video' : 'image';
+  const rawUrl = (rawSlide.publicUrl || rawSlide.url || '').trim();
+  if (!rawUrl) return;
+  const isVid =
+    type === 'video' || /\.mp4(\?|$)/i.test(rawUrl) || /drive\.usercontent\.google\.com\/download/i.test(rawUrl);
+  const norm = normalizeCloudMedia(rawUrl, isVid ? 'video' : 'image');
+  composerCarouselSlides.push({
+    id: `cs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    mediaId: rawSlide.mediaId || null,
+    title: rawSlide.title || `Diapositiva ${composerCarouselSlides.length + 1}`,
+    url: norm.thumbUrl || rawSlide.url || rawUrl,
+    publicUrl: norm.publicUrl || rawUrl,
+    type: isVid ? 'video' : 'image',
+    format: isVid ? 'MP4' : 'JPG'
+  });
+  composerCarouselPreviewIdx = composerCarouselSlides.length - 1;
+  renderCarouselSlidesUI();
+}
+
+function renderCarouselLibraryPicker() {
+  const picker = document.getElementById('carouselLibraryPicker');
+  if (!picker) return;
+  if (!Array.isArray(appState.mediaLibrary) || !appState.mediaLibrary.length) {
+    picker.innerHTML = `<span class="muted-text" style="font-size:0.72rem;">Sube archivos en Media Library o pega URLs abajo.</span>`;
+    return;
+  }
+  picker.innerHTML = appState.mediaLibrary
+    .map((m) => {
+      const norm = normalizeCloudMedia(m.originalUrl || m.url || m.publicUrl || '', m.type);
+      const thumb = norm.thumbUrl || m.url || './icon.svg';
+      return `
+        <button type="button" class="carousel-pick-chip" data-pick-media-id="${m.id}" title="Añadir ${escapeHtml(m.title)} al carrusel">
+          <img src="${escapeHtml(thumb)}" referrerpolicy="no-referrer" alt="${escapeHtml(m.title)}" onerror="this.src='./icon.svg'" />
+          <span class="carousel-pick-plus">＋</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  picker.querySelectorAll('.carousel-pick-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const m = appState.mediaLibrary.find((item) => item.id === btn.dataset.pickMediaId);
+      if (!m) return;
+      addCarouselSlideToComposer({
+        mediaId: m.id,
+        title: m.title,
+        url: m.url,
+        publicUrl: m.publicUrl || m.url,
+        type: m.type,
+        format: m.format
+      });
+    });
+  });
+}
+
+function renderCarouselSlidesUI() {
+  const listEl = document.getElementById('carouselSlidesList');
+  const badgeEl = document.getElementById('carouselCountBadge');
+  const urlInput = document.getElementById('postPublicMediaUrl');
+
+  if (badgeEl) {
+    const n = composerCarouselSlides.length;
+    badgeEl.textContent = `${n} / 10 (mín. 2)`;
+    badgeEl.style.background = n >= 2 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.22)';
+    badgeEl.style.color = n >= 2 ? '#6ee7b7' : '#fde68a';
+  }
+
+  if (composerCarouselSlides.length > 0 && urlInput) {
+    urlInput.value = composerCarouselSlides[0].publicUrl || composerCarouselSlides[0].url;
+  }
+
+  if (composerCarouselPreviewIdx >= composerCarouselSlides.length) {
+    composerCarouselPreviewIdx = Math.max(0, composerCarouselSlides.length - 1);
+  }
+
+  if (listEl) {
+    if (!composerCarouselSlides.length) {
+      listEl.innerHTML = `<div class="muted-text" style="font-size:0.74rem;padding:6px;">Aún no hay diapositivas. Toca 2 o más medios arriba o pega URLs.</div>`;
+    } else {
+      listEl.innerHTML = composerCarouselSlides
+        .map(
+          (slide, idx) => `
+          <div class="carousel-slide-item" data-slide-idx="${idx}">
+            <span class="carousel-slide-num">${idx + 1}</span>
+            <img src="${escapeHtml(slide.url)}" class="carousel-slide-thumb" referrerpolicy="no-referrer" alt="" onerror="this.src='./icon.svg'" />
+            <div class="carousel-slide-meta">
+              <strong>${escapeHtml(slide.title)}</strong>
+              <small>${slide.type === 'video' ? '🎬 Video MP4' : '🖼️ Imagen'} • Diapositiva ${idx + 1}</small>
+            </div>
+            <div class="carousel-slide-actions">
+              <button type="button" class="btn-outline btn-sm" data-cs-act="up" data-idx="${idx}" ${idx === 0 ? 'disabled' : ''} title="Subir orden">▲</button>
+              <button type="button" class="btn-outline btn-sm" data-cs-act="down" data-idx="${idx}" ${idx === composerCarouselSlides.length - 1 ? 'disabled' : ''} title="Bajar orden">▼</button>
+              <button type="button" class="btn-outline btn-sm" data-cs-act="del" data-idx="${idx}" title="Quitar">✕</button>
+            </div>
+          </div>
+        `
+        )
+        .join('');
+
+      listEl.querySelectorAll('.carousel-slide-item').forEach((row) => {
+        row.addEventListener('click', (ev) => {
+          if (ev.target.closest('button')) return;
+          composerCarouselPreviewIdx = Number(row.dataset.slideIdx) || 0;
+          updateComposerCarouselPreview();
+        });
+      });
+
+      listEl.querySelectorAll('[data-cs-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.dataset.idx);
+          const act = btn.dataset.csAct;
+          if (act === 'up' && idx > 0) {
+            const tmp = composerCarouselSlides[idx - 1];
+            composerCarouselSlides[idx - 1] = composerCarouselSlides[idx];
+            composerCarouselSlides[idx] = tmp;
+            composerCarouselPreviewIdx = idx - 1;
+          } else if (act === 'down' && idx < composerCarouselSlides.length - 1) {
+            const tmp = composerCarouselSlides[idx + 1];
+            composerCarouselSlides[idx + 1] = composerCarouselSlides[idx];
+            composerCarouselSlides[idx] = tmp;
+            composerCarouselPreviewIdx = idx + 1;
+          } else if (act === 'del') {
+            composerCarouselSlides.splice(idx, 1);
+            if (composerCarouselPreviewIdx >= composerCarouselSlides.length) {
+              composerCarouselPreviewIdx = Math.max(0, composerCarouselSlides.length - 1);
+            }
+          }
+          renderCarouselSlidesUI();
+        });
+      });
+    }
+  }
+
+  const selectedRadio = document.querySelector('input[name="postFormatRadio"]:checked');
+  if (selectedRadio && selectedRadio.value === 'CAROUSEL') {
+    updateComposerCarouselPreview();
+  }
+}
+
+function updateComposerCarouselPreview() {
+  const box = document.getElementById('composerMediaPreview');
+  if (!box) return;
+  if (!composerCarouselSlides.length) {
+    box.innerHTML = `<span>🎠 Agrega entre 2 y 10 fotos/videos abajo</span>`;
+    return;
+  }
+  const idx = Math.max(0, Math.min(composerCarouselPreviewIdx, composerCarouselSlides.length - 1));
+  const slide = composerCarouselSlides[idx];
+  const norm = normalizeCloudMedia(slide.publicUrl || slide.url, slide.type);
+  const displayUrl = norm.thumbUrl || slide.url;
+  const mediaHtml =
+    slide.type === 'video' && !norm.isDrive
+      ? `<video src="${escapeHtml(displayUrl)}" controls muted></video>`
+      : `<img src="${escapeHtml(displayUrl)}" referrerpolicy="no-referrer" alt="Slide ${idx + 1}" onerror="this.src='./icon.svg'" />`;
+
+  const dotsHtml = composerCarouselSlides
+    .map((_, dIdx) => `<span class="carousel-dot ${dIdx === idx ? 'active' : ''}"></span>`)
+    .join('');
+
+  box.innerHTML = `
+    <div class="carousel-preview-stage">
+      ${mediaHtml}
+      <span class="carousel-preview-counter">🎠 ${idx + 1} / ${composerCarouselSlides.length}</span>
+      ${composerCarouselSlides.length > 1 ? `<button type="button" class="carousel-preview-nav prev" id="btnCarouselPrev">‹</button><button type="button" class="carousel-preview-nav next" id="btnCarouselNext">›</button>` : ''}
+      <div class="carousel-preview-dots">${dotsHtml}</div>
+    </div>
+  `;
+
+  document.getElementById('btnCarouselPrev')?.addEventListener('click', () => {
+    composerCarouselPreviewIdx = (idx - 1 + composerCarouselSlides.length) % composerCarouselSlides.length;
+    updateComposerCarouselPreview();
+  });
+  document.getElementById('btnCarouselNext')?.addEventListener('click', () => {
+    composerCarouselPreviewIdx = (idx + 1) % composerCarouselSlides.length;
+    updateComposerCarouselPreview();
+  });
+}
+
 function setComposerFormatUI(formatValue) {
   const fmt = formatValue || 'POST';
   document.querySelectorAll('.format-choice').forEach((card) => {
@@ -3443,43 +4500,121 @@ function setComposerFormatUI(formatValue) {
     if (radio) radio.checked = isMatch;
   });
 
+  const modalTitleEl = document.getElementById('composerModalTitle');
+  const isEditing = Boolean(document.getElementById('postId')?.value);
+  if (modalTitleEl) {
+    if (isEditing) {
+      modalTitleEl.textContent =
+        fmt === 'CAROUSEL'
+          ? '🎠 Editar Carrusel'
+          : fmt === 'STORY'
+          ? '⭕ Editar Historia (24h)'
+          : fmt === 'REEL'
+          ? '🎬 Editar Reel'
+          : fmt === 'BOTH'
+          ? '🔥 Editar Historia + Feed'
+          : '✏️ Editar Publicación';
+    } else {
+      modalTitleEl.textContent =
+        fmt === 'CAROUSEL'
+          ? '🎠 Programar Nuevo Carrusel (2–10)'
+          : fmt === 'STORY'
+          ? '⭕ Programar Nueva Historia (24h)'
+          : fmt === 'REEL'
+          ? '🎬 Programar Nuevo Reel'
+          : fmt === 'BOTH'
+          ? '🔥 Programar Ambos (Historia + Feed)'
+          : '✨ Programar Publicación (Post)';
+    }
+  }
+
   const previewBox = document.getElementById('composerMediaPreview');
   const storyNotice = document.getElementById('storyHelperNotice');
   const mediaTypeSelect = document.getElementById('postMediaType');
   const captionLabel = document.getElementById('captionFieldLabel');
+  const singleFields = document.getElementById('singleMediaFields');
+  const carouselPanel = document.getElementById('carouselBuilderPanel');
+  const publicUrlInput = document.getElementById('postPublicMediaUrl');
 
-  if (fmt === 'STORY') {
-    previewBox?.classList.add('story-aspect');
-    storyNotice?.classList.remove('hidden');
-    if (storyNotice) {
-      storyNotice.innerHTML =
-        '⭕ <strong>Modo Solo Historia (24h):</strong> Se publicará <b>exclusivamente en Historias 24h</b> (no irá a Reels ni al Feed). Desaparece a las 24 horas.';
-    }
-    if (mediaTypeSelect) mediaTypeSelect.value = 'STORIES';
-    if (captionLabel) captionLabel.textContent = 'Notas / Guion de la Historia (Recordatorio interno o texto a copiar)';
-  } else if (fmt === 'REEL') {
-    previewBox?.classList.add('story-aspect');
-    storyNotice?.classList.remove('hidden');
-    if (storyNotice) {
-      storyNotice.innerHTML =
-        '🎬 <strong>Modo Solo Reel:</strong> Se publicará <b>exclusivamente como Reel de video</b> en tu cuenta (no irá a la Historia 24h).';
-    }
-    if (mediaTypeSelect) mediaTypeSelect.value = 'REELS';
-    if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags del Reel';
-  } else if (fmt === 'BOTH') {
-    previewBox?.classList.add('story-aspect');
-    storyNotice?.classList.remove('hidden');
-    if (storyNotice) {
-      storyNotice.innerHTML =
-        '🔥 <strong>Modo Ambos (Historia 24h + Reel/Post):</strong> SHEEP 100 publicará tu archivo en tu <b>Historia 24h</b> Y también como <b>Reel / Post</b> en el Feed en un solo paso.';
-    }
-    if (mediaTypeSelect) mediaTypeSelect.value = 'BOTH';
-    if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags para el Reel/Post';
-  } else {
+  if (fmt === 'CAROUSEL') {
     previewBox?.classList.remove('story-aspect');
-    storyNotice?.classList.add('hidden');
-    if (mediaTypeSelect) mediaTypeSelect.value = 'IMAGE';
-    if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags del Post';
+    singleFields?.classList.add('hidden');
+    carouselPanel?.classList.remove('hidden');
+    if (publicUrlInput) publicUrlInput.required = false;
+    storyNotice?.classList.remove('hidden');
+    if (storyNotice) {
+      storyNotice.innerHTML =
+        '🎠 <strong>Modo Carrusel (2 a 10 slides):</strong> Se publicará como álbum deslizable en tu Feed de Instagram (fotos y/o videos MP4) y como álbum multi-foto en Facebook Page.';
+    }
+    if (mediaTypeSelect) mediaTypeSelect.value = 'CAROUSEL';
+    if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags del Carrusel';
+
+    if (composerCarouselSlides.length === 0) {
+      const existingUrl = (publicUrlInput?.value || '').trim();
+      const selMediaId = document.getElementById('postMediaSelect')?.value || null;
+      const linked = selMediaId ? appState.mediaLibrary.find((m) => m.id === selMediaId) : null;
+      if (linked) {
+        addCarouselSlideToComposer({
+          mediaId: linked.id,
+          title: linked.title,
+          url: linked.url,
+          publicUrl: linked.publicUrl || linked.url,
+          type: linked.type,
+          format: linked.format
+        });
+      } else if (existingUrl) {
+        addCarouselSlideToComposer({
+          title: 'Diapositiva 1',
+          url: existingUrl,
+          publicUrl: existingUrl,
+          type: /\.mp4(\?|$)/i.test(existingUrl) ? 'video' : 'image'
+        });
+      }
+    }
+    renderCarouselLibraryPicker();
+    renderCarouselSlidesUI();
+  } else {
+    singleFields?.classList.remove('hidden');
+    carouselPanel?.classList.add('hidden');
+    if (publicUrlInput) publicUrlInput.required = true;
+
+    if (fmt === 'STORY') {
+      previewBox?.classList.add('story-aspect');
+      storyNotice?.classList.remove('hidden');
+      if (storyNotice) {
+        storyNotice.innerHTML =
+          '⭕ <strong>Modo Solo Historia (24h):</strong> Se publicará <b>exclusivamente en Historias 24h</b> (no irá a Reels ni al Feed). Desaparece a las 24 horas.';
+      }
+      if (mediaTypeSelect) mediaTypeSelect.value = 'STORIES';
+      if (captionLabel) captionLabel.textContent = 'Notas / Guion de la Historia (Recordatorio interno o texto a copiar)';
+    } else if (fmt === 'REEL') {
+      previewBox?.classList.add('story-aspect');
+      storyNotice?.classList.remove('hidden');
+      if (storyNotice) {
+        storyNotice.innerHTML =
+          '🎬 <strong>Modo Solo Reel:</strong> Se publicará <b>exclusivamente como Reel de video</b> en tu cuenta (no irá a la Historia 24h).';
+      }
+      if (mediaTypeSelect) mediaTypeSelect.value = 'REELS';
+      if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags del Reel';
+    } else if (fmt === 'BOTH') {
+      previewBox?.classList.add('story-aspect');
+      storyNotice?.classList.remove('hidden');
+      if (storyNotice) {
+        storyNotice.innerHTML =
+          '🔥 <strong>Modo Ambos (Historia 24h + Reel/Post):</strong> SHEEP 100 publicará tu archivo en tu <b>Historia 24h</b> Y también como <b>Reel / Post</b> en el Feed en un solo paso.';
+      }
+      if (mediaTypeSelect) mediaTypeSelect.value = 'BOTH';
+      if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags para el Reel/Post';
+    } else {
+      previewBox?.classList.remove('story-aspect');
+      storyNotice?.classList.add('hidden');
+      if (mediaTypeSelect) mediaTypeSelect.value = 'IMAGE';
+      if (captionLabel) captionLabel.textContent = 'Copy / Descripción y Hashtags del Post';
+    }
+
+    if (publicUrlInput?.value) {
+      updateComposerPreview(publicUrlInput.value);
+    }
   }
 }
 
@@ -3497,6 +4632,30 @@ function initComposerEvents() {
     card.addEventListener('click', () => {
       setComposerFormatUI(card.dataset.formatCard);
     });
+  });
+
+  document.getElementById('postMediaType')?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    const map = { CAROUSEL: 'CAROUSEL', STORIES: 'STORY', REELS: 'REEL', BOTH: 'BOTH', IMAGE: 'POST' };
+    if (map[val]) setComposerFormatUI(map[val]);
+  });
+
+  document.getElementById('btnAddCarouselUrl')?.addEventListener('click', () => {
+    const urlInput = document.getElementById('carouselAddUrlInput');
+    const typeSel = document.getElementById('carouselAddUrlType');
+    const url = (urlInput?.value || '').trim();
+    if (!url) {
+      showToast('⚠️ Pega primero una URL pública o enlace de Google Drive.');
+      return;
+    }
+    const type = /\.mp4(\?|$)/i.test(url) ? 'video' : (typeSel?.value || 'image');
+    addCarouselSlideToComposer({
+      title: `Slide ${composerCarouselSlides.length + 1}`,
+      url,
+      publicUrl: url,
+      type
+    });
+    urlInput.value = '';
   });
 
   const mediaSelect = document.getElementById('postMediaSelect');
@@ -3525,8 +4684,23 @@ function initComposerEvents() {
 
     const selectedRadio = document.querySelector('input[name="postFormatRadio"]:checked');
     const postFormat = selectedRadio ? selectedRadio.value : 'POST';
+    const isCarousel = postFormat === 'CAROUSEL';
+
+    if (isCarousel) {
+      if (composerCarouselSlides.length < 2) {
+        showToast('⚠️ Un Carrusel necesita mínimo 2 diapositivas. Agrega al menos 2 fotos o videos.');
+        return;
+      }
+      if (composerCarouselSlides.length > 10) {
+        showToast('⚠️ Meta permite máximo 10 diapositivas en un Carrusel.');
+        return;
+      }
+    }
+
     const mediaType =
-      postFormat === 'STORY'
+      isCarousel
+        ? 'CAROUSEL'
+        : postFormat === 'STORY'
         ? 'STORIES'
         : postFormat === 'REEL'
         ? 'REELS'
@@ -3539,23 +4713,40 @@ function initComposerEvents() {
       ? new Date(scheduledLocal).toISOString()
       : new Date().toISOString();
 
-    const mediaUrlVal = document.getElementById('postPublicMediaUrl').value.trim();
-    const selectedMediaId = document.getElementById('postMediaSelect').value || null;
+    const firstSlide = isCarousel ? composerCarouselSlides[0] : null;
+    const mediaUrlVal = isCarousel
+      ? (firstSlide.publicUrl || firstSlide.url || '').trim()
+      : document.getElementById('postPublicMediaUrl').value.trim();
+    const selectedMediaId = isCarousel
+      ? firstSlide.mediaId || null
+      : document.getElementById('postMediaSelect').value || null;
     const linkedMedia = selectedMediaId
       ? appState.mediaLibrary.find((m) => m.id === selectedMediaId)
       : null;
     const isVid =
-      linkedMedia?.type === 'video' ||
-      linkedMedia?.format === 'MP4' ||
-      postFormat === 'REEL' ||
-      mediaType === 'REELS' ||
-      mediaType === 'VIDEO' ||
-      /\.mp4(\?|$)/i.test(mediaUrlVal) ||
-      /drive\.usercontent\.google\.com\/download/i.test(mediaUrlVal);
+      !isCarousel &&
+      (linkedMedia?.type === 'video' ||
+        linkedMedia?.format === 'MP4' ||
+        postFormat === 'REEL' ||
+        mediaType === 'REELS' ||
+        mediaType === 'VIDEO' ||
+        /\.mp4(\?|$)/i.test(mediaUrlVal) ||
+        /drive\.usercontent\.google\.com\/download/i.test(mediaUrlVal));
     const norm = normalizeCloudMedia(mediaUrlVal, isVid ? 'video' : 'image');
-    const visualThumbUrl = norm.thumbUrl || linkedMedia?.url || mediaUrlVal;
-    const binaryPublicUrl = norm.publicUrl || mediaUrlVal;
+    const visualThumbUrl = isCarousel ? firstSlide.url || norm.thumbUrl || mediaUrlVal : norm.thumbUrl || linkedMedia?.url || mediaUrlVal;
+    const binaryPublicUrl = isCarousel ? firstSlide.publicUrl || norm.publicUrl || mediaUrlVal : norm.publicUrl || mediaUrlVal;
     const existingId = document.getElementById('postId').value;
+
+    const carouselItemsPayload = isCarousel
+      ? composerCarouselSlides.map((s) => ({
+          mediaId: s.mediaId || null,
+          title: s.title || '',
+          url: s.url,
+          publicUrl: s.publicUrl || s.url,
+          type: s.type || 'image',
+          format: s.format || (s.type === 'video' ? 'MP4' : 'JPG')
+        }))
+      : undefined;
 
     if (existingId) {
       const idx = appState.posts.findIndex((p) => p.id === existingId);
@@ -3569,6 +4760,7 @@ function initComposerEvents() {
           publicMediaUrl: binaryPublicUrl,
           mediaType,
           postFormat,
+          carouselItems: carouselItemsPayload,
           platforms: platforms.length ? platforms : ['instagram'],
           scheduledAt: scheduledIso,
           status: document.getElementById('postStatus').value,
@@ -3580,7 +4772,9 @@ function initComposerEvents() {
         id: `post-${Date.now()}`,
         title:
           document.getElementById('postTitle').value.trim() ||
-          (postFormat === 'STORY'
+          (isCarousel
+            ? `Carrusel (${composerCarouselSlides.length} slides)`
+            : postFormat === 'STORY'
             ? 'Nueva Historia 24h'
             : postFormat === 'REEL'
             ? 'Nuevo Reel'
@@ -3593,6 +4787,7 @@ function initComposerEvents() {
         publicMediaUrl: binaryPublicUrl,
         mediaType,
         postFormat,
+        carouselItems: carouselItemsPayload,
         platforms: platforms.length ? platforms : ['instagram'],
         scheduledAt: scheduledIso,
         status: document.getElementById('postStatus').value,
@@ -3603,14 +4798,15 @@ function initComposerEvents() {
         logs: [
           {
             time: new Date().toISOString(),
-            message:
-              postFormat === 'BOTH'
-                ? 'Programado para Historia 24h + Reel/Post simultáneamente.'
-                : postFormat === 'STORY'
-                ? 'Programado exclusivamente para Historia 24h.'
-                : postFormat === 'REEL'
-                ? 'Programado exclusivamente para Reel.'
-                : 'Post programado en SHEEP 100.'
+            message: isCarousel
+              ? `Carrusel programado (${composerCarouselSlides.length} diapositivas).`
+              : postFormat === 'BOTH'
+              ? 'Programado para Historia 24h + Reel/Post simultáneamente.'
+              : postFormat === 'STORY'
+              ? 'Programado exclusivamente para Historia 24h.'
+              : postFormat === 'REEL'
+              ? 'Programado exclusivamente para Reel.'
+              : 'Post programado en SHEEP 100.'
           }
         ]
       });
@@ -3635,6 +4831,11 @@ function populateComposerMediaDropdown() {
 }
 
 function updateComposerPreview(url) {
+  const selectedRadio = document.querySelector('input[name="postFormatRadio"]:checked');
+  if (selectedRadio && selectedRadio.value === 'CAROUSEL') {
+    updateComposerCarouselPreview();
+    return;
+  }
   const box = document.getElementById('composerMediaPreview');
   if (!url) {
     box.innerHTML = `<span>Selecciona un medio o pega una URL</span>`;
@@ -3654,21 +4855,35 @@ function openComposerModal(opts = {}) {
   const modal = document.getElementById('composerModal');
   const form = document.getElementById('formPostComposer');
   form.reset();
+  composerCarouselSlides = [];
+  composerCarouselPreviewIdx = 0;
 
   const defaultTomorrow = new Date(Date.now() + 2 * 3600 * 1000);
   defaultTomorrow.setMinutes(0, 0, 0);
 
   if (opts.post) {
     const p = opts.post;
-    const fmt = p.postFormat || (p.mediaType === 'STORIES' ? 'STORY' : p.mediaType === 'REELS' ? 'REEL' : 'POST');
+    const fmt =
+      p.postFormat ||
+      (isPostCarousel(p)
+        ? 'CAROUSEL'
+        : p.mediaType === 'STORIES'
+        ? 'STORY'
+        : p.mediaType === 'REELS'
+        ? 'REEL'
+        : 'POST');
     document.getElementById('composerModalTitle').textContent =
-      fmt === 'STORY' ? '✏️ Editar Historia (24h)' : '✏️ Editar Publicación';
+      fmt === 'CAROUSEL'
+        ? '🎠 Editar Carrusel'
+        : fmt === 'STORY'
+        ? '✏️ Editar Historia (24h)'
+        : '✏️ Editar Publicación';
     document.getElementById('postId').value = p.id;
     document.getElementById('postTitle').value = p.title || '';
     document.getElementById('postCaption').value = p.caption || '';
     document.getElementById('postMediaSelect').value = p.mediaId || '';
     document.getElementById('postPublicMediaUrl').value = p.publicMediaUrl || p.mediaUrl || '';
-    document.getElementById('postMediaType').value = p.mediaType || 'IMAGE';
+    document.getElementById('postMediaType').value = fmt === 'CAROUSEL' ? 'CAROUSEL' : p.mediaType || 'IMAGE';
     document.getElementById('postFirstComment').value = p.firstComment || '';
     document.getElementById('postStatus').value = p.status === 'draft' ? 'draft' : 'scheduled';
     document.getElementById('postScheduledAt').value = toLocalDateTimeInputValue(
@@ -3677,19 +4892,23 @@ function openComposerModal(opts = {}) {
     document.querySelectorAll('input[name="postPlatform"]').forEach((chk) => {
       chk.checked = (p.platforms || []).includes(chk.value);
     });
+    if (Array.isArray(p.carouselItems) && p.carouselItems.length) {
+      p.carouselItems.forEach((sl) => addCarouselSlideToComposer(sl));
+      composerCarouselPreviewIdx = 0;
+    }
     setComposerFormatUI(fmt);
     updateComposerPreview(p.publicMediaUrl || p.mediaUrl);
   } else {
     const initialFormat = opts.defaultFormat || 'POST';
     document.getElementById('composerModalTitle').textContent =
-      initialFormat === 'STORY'
+      initialFormat === 'CAROUSEL'
+        ? '🎠 Programar Nuevo Carrusel'
+        : initialFormat === 'STORY'
         ? '⭕ Programar Nueva Historia (24h)'
         : '✨ Programar Post o Historia';
     document.getElementById('postId').value = '';
     document.getElementById('postScheduledAt').value =
       opts.scheduledAtLocal || toLocalDateTimeInputValue(defaultTomorrow);
-
-    setComposerFormatUI(initialFormat);
 
     if (opts.mediaId) {
       const m = appState.mediaLibrary.find((item) => item.id === opts.mediaId);
@@ -3697,15 +4916,28 @@ function openComposerModal(opts = {}) {
         document.getElementById('postMediaSelect').value = m.id;
         document.getElementById('postPublicMediaUrl').value = m.publicUrl || m.url;
         document.getElementById('postTitle').value =
-          (initialFormat === 'STORY' ? 'Historia: ' : '') + m.title.replace(/\.[^.]+$/, '');
+          (initialFormat === 'STORY' ? 'Historia: ' : initialFormat === 'CAROUSEL' ? 'Carrusel: ' : '') +
+          m.title.replace(/\.[^.]+$/, '');
+        if (initialFormat === 'CAROUSEL') {
+          addCarouselSlideToComposer({
+            mediaId: m.id,
+            title: m.title,
+            url: m.url,
+            publicUrl: m.publicUrl || m.url,
+            type: m.type,
+            format: m.format
+          });
+        }
         updateComposerPreview(m.url);
       }
-    } else if (appState.mediaLibrary[0]) {
+    } else if (appState.mediaLibrary[0] && initialFormat !== 'CAROUSEL') {
       const first = appState.mediaLibrary[0];
       document.getElementById('postMediaSelect').value = first.id;
       document.getElementById('postPublicMediaUrl').value = first.publicUrl || first.url;
       updateComposerPreview(first.url);
     }
+
+    setComposerFormatUI(initialFormat);
 
     if (opts.prefillTitle) document.getElementById('postTitle').value = opts.prefillTitle;
     if (opts.prefillCaption) document.getElementById('postCaption').value = opts.prefillCaption;
