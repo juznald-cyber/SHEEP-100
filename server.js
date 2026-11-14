@@ -1858,7 +1858,7 @@ app.post('/api/ai/generate', async (req, res) => {
   const selectedPlatform = platform || 'instagram';
   const seedNum = Number(variationSeed) || Math.floor(Math.random() * 1000);
 
-  // If user configured a Gemini API key, call Gemini 2.5 Flash
+  // If user configured a Gemini API key, call Gemini Interactions API with @google/genai
   if (db.metaConfig.geminiApiKey && db.metaConfig.geminiApiKey.trim()) {
     try {
       const avoidList =
@@ -1872,30 +1872,42 @@ Objetivo / Llamado a la acción: ${callToAction || 'Generar interacción y guard
 ${includeEmojis !== false ? 'Incluye emojis estratégicos y saltos de línea limpios.' : 'Usa pocos emojis.'}
 Semilla de variación: ${seedNum}.${avoidList}
 Al final incluye hashtags relevantes al tema.
-Devuelve el resultado en formato JSON con las claves:
+Devuelve ÚNICAMENTE un JSON válido con las claves:
 { "options": [{ "title": "...", "caption": "...", "firstComment": "..." }] }`;
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-          db.metaConfig.geminiApiKey.trim()
-        )}`,
-        {
+      const apiKey = db.metaConfig.geminiApiKey.trim();
+      let rawText = null;
+
+      try {
+        const { GoogleGenAI } = require('@google/genai');
+        const client = new GoogleGenAI({ apiKey });
+        const interaction = await client.interactions.create({
+          model: 'gemini-3.5-flash-lite',
+          input: prompt
+        });
+        rawText = interaction.output_text;
+      } catch (sdkErr) {
+        console.warn('Interactions SDK call failed, trying direct HTTP fallback:', sdkErr.message);
+        const res = await fetch('https://generativelanguage.googleapis.com/v1/interactions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 1.05,
-              topP: 0.95
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({ model: 'gemini-3.5-flash-lite', input: prompt })
+        });
+        const data = await res.json();
+        if (data?.steps) {
+          for (const step of data.steps) {
+            if (step.type === 'model_output' && Array.isArray(step.content)) {
+              for (const item of step.content) {
+                if (item.type === 'text' && item.text) rawText = (rawText || '') + item.text;
+              }
             }
-          })
+          }
         }
-      );
-      const geminiData = await geminiRes.json();
-      const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+      }
+
       if (rawText) {
-        const parsed = JSON.parse(rawText);
+        const clean = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        const parsed = JSON.parse(clean);
         return res.json({ source: 'gemini', ...parsed });
       }
     } catch (e) {

@@ -3635,58 +3635,84 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
   ]
 }`;
 
-  const candidateModels = [
-    { model: 'gemini-1.5-flash', apiVersion: 'v1beta' },
-    { model: 'gemini-1.5-flash-latest', apiVersion: 'v1beta' },
-    { model: 'gemini-1.5-flash', apiVersion: 'v1' },
-    { model: 'gemini-1.5-pro', apiVersion: 'v1beta' },
-    { model: 'gemini-2.0-flash', apiVersion: 'v1beta' }
-  ];
-  let lastErr = null;
+  // Primary: Google Gemini Interactions API (gemini-3.5-flash-lite / gemini-3.8-flash)
   let rawText = null;
-
-  for (const { model, apiVersion } of candidateModels) {
+  let lastErr = null;
+  const interactionModels = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+  for (const model of interactionModels) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(
-          cleanKey
-        )}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': cleanKey
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 1.05,
-              topP: 0.95
-            }
-          })
-        }
-      );
-
+      const res = await fetch('https://generativelanguage.googleapis.com/v1/interactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': cleanKey
+        },
+        body: JSON.stringify({
+          model,
+          input: prompt
+        })
+      });
       const data = await res.json();
-      if (!res.ok || data.error) {
-        const msg = data?.error?.message || `Error Gemini HTTP ${res.status}`;
-        const reason = data?.error?.details?.[0]?.reason || '';
-        if (reason === 'ACCESS_TOKEN_TYPE_UNSUPPORTED' || msg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED')) {
-          throw new Error('La clave tiene restricción "Gemini API" en Google Cloud. En Google Cloud Console (APIs y Servicios -> Credenciales), edita tu clave y en "Restricciones de API" cámbiala a "Generative Language API" o "No restringir clave".');
+      if (res.ok && Array.isArray(data?.steps)) {
+        let text = '';
+        for (const step of data.steps) {
+          if (step.type === 'model_output' && Array.isArray(step.content)) {
+            for (const item of step.content) {
+              if (item.type === 'text' && item.text) text += item.text;
+            }
+          }
         }
-        if (msg.includes('API key not valid')) {
-          throw new Error('API key de Gemini no válida o rechazada por Google. Verifica haber seleccionado "Generative Language API" en las restricciones de la clave.');
+        if (text.trim()) {
+          rawText = text.trim();
+          break;
         }
-        lastErr = new Error(msg);
-        continue;
       }
-      rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) break;
-    } catch (e) {
-      lastErr = e;
-      if (e.message && (e.message.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || e.message.includes('API key de Gemini no válida') || e.message.includes('Google Cloud Console'))) {
-        throw e;
+    } catch (_) {}
+  }
+
+  // Fallback: Legacy generateContent models
+  if (!rawText) {
+    const candidateModels = [
+      { model: 'gemini-1.5-flash', apiVersion: 'v1beta' },
+      { model: 'gemini-1.5-flash-latest', apiVersion: 'v1beta' },
+      { model: 'gemini-1.5-flash', apiVersion: 'v1' },
+      { model: 'gemini-1.5-pro', apiVersion: 'v1beta' },
+      { model: 'gemini-2.0-flash', apiVersion: 'v1beta' }
+    ];
+
+    for (const { model, apiVersion } of candidateModels) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(
+            cleanKey
+          )}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': cleanKey
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 1.05,
+                topP: 0.95
+              }
+            })
+          }
+        );
+
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          const msg = data?.error?.message || `Error Gemini HTTP ${res.status}`;
+          lastErr = new Error(msg);
+          continue;
+        }
+        rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText) break;
+      } catch (e) {
+        lastErr = e;
       }
     }
   }
