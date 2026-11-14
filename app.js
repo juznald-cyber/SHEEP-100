@@ -3594,7 +3594,7 @@ function buildSmartVariedAiOptions({ topic, platform, tone, cta, emojiStyle = 'r
 }
 
 async function callGeminiDirectForCopies({ apiKey, topic, platform, tone, cta, emojiStyle, variationSeed, previousProposals = [] }) {
-  const cleanKey = (apiKey || '').trim();
+  let cleanKey = (apiKey || '').trim().replace(/^(AQ\.)+/i, 'AQ.');
   if (!cleanKey) {
     throw new Error('Falta la API Key de Gemini. Pulsa "🔑 Conectar Gemini" para ingresarla.');
   }
@@ -3895,7 +3895,10 @@ function initAiStudioEvents() {
   });
 
   document.getElementById('btnSaveAiGeminiKey')?.addEventListener('click', async () => {
-    const keyVal = (document.getElementById('aiQuickGeminiKey')?.value || '').trim();
+    let keyVal = (document.getElementById('aiQuickGeminiKey')?.value || '').trim();
+    keyVal = keyVal.replace(/^(AQ\.)+/i, 'AQ.');
+    const inputEl = document.getElementById('aiQuickGeminiKey');
+    if (inputEl) inputEl.value = keyVal;
     appState.metaConfig = {
       ...(appState.metaConfig || {}),
       geminiApiKey: keyVal
