@@ -3635,14 +3635,20 @@ Devuelve ÚNICAMENTE un JSON válido con exactamente 3 propuestas MUY distintas 
   ]
 }`;
 
-  const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const candidateModels = [
+    { model: 'gemini-1.5-flash', apiVersion: 'v1beta' },
+    { model: 'gemini-1.5-flash-latest', apiVersion: 'v1beta' },
+    { model: 'gemini-1.5-flash', apiVersion: 'v1' },
+    { model: 'gemini-1.5-pro', apiVersion: 'v1beta' },
+    { model: 'gemini-2.0-flash', apiVersion: 'v1beta' }
+  ];
   let lastErr = null;
   let rawText = null;
 
-  for (const model of candidateModels) {
+  for (const { model, apiVersion } of candidateModels) {
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+        `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${encodeURIComponent(
           cleanKey
         )}`,
         {
